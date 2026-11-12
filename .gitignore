@@ -8,6 +8,7 @@ __pycache__/
 # Local model / voice data (large, private, or licensed separately)
 model.vrm
 voice/cache/
+voice/voices/
 voice/*.wav
 voice/*.m4a
 voice/*.mp3

@@ -1,20 +1,26 @@
 import array
+import base64
 import hashlib
 import http.server
 import io
 import json
 import os
+import re
 import subprocess
 import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 import wave
 
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 VOICE_DIR = os.path.join(ROOT, 'voice')
+VOICES_DIR = os.path.join(VOICE_DIR, 'voices')
 CACHE_DIR = os.path.join(VOICE_DIR, 'cache')
+INDEX_PATH = os.path.join(VOICES_DIR, 'index.json')
+os.makedirs(VOICES_DIR, exist_ok=True)
 os.makedirs(CACHE_DIR, exist_ok=True)
 
 TTS_ENGINE = os.environ.get('TTS_ENGINE', 'gpt-sovits').lower()
@@ -26,10 +32,70 @@ TTS_SPEED = float(os.environ.get('TTS_SPEED', '1.0'))
 TTS_SEED = int(os.environ.get('TTS_SEED', '42'))
 TTS_GAIN_DB = float(os.environ.get('TTS_GAIN_DB', '8'))
 TTS_CACHE_VERSION = os.environ.get('TTS_CACHE_VERSION', 'xiaoke-v1')
+MAX_VOICE_BYTES = 30 * 1024 * 1024
+ALLOWED_EXT = {'wav', 'mp3', 'm4a', 'flac', 'ogg', 'aac'}
+
+INDEX = {'current': None, 'voices': {}}
 
 
-def cache_path(text: str, lang: str) -> str:
-    key = f'{TTS_CACHE_VERSION}|{lang}|{text}'.encode('utf-8')
+def load_index():
+    global INDEX
+    try:
+        with open(INDEX_PATH, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        if isinstance(data, dict) and isinstance(data.get('voices'), dict):
+            INDEX = {'current': data.get('current'), 'voices': data['voices']}
+    except Exception:
+        INDEX = {'current': None, 'voices': {}}
+
+
+def save_index():
+    tmp = INDEX_PATH + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(INDEX, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, INDEX_PATH)
+
+
+def voice_file(voice):
+    if not voice:
+        return None
+    if voice.get('ref'):
+        return voice['ref']
+    if voice.get('file'):
+        return os.path.join(VOICES_DIR, voice['file'])
+    return None
+
+
+def current_voice():
+    vid = INDEX.get('current')
+    voice = INDEX.get('voices', {}).get(vid) if vid else None
+    if voice and voice_file(voice) and os.path.exists(voice_file(voice)):
+        return voice
+    if TTS_REF and TTS_PROMPT and os.path.exists(TTS_REF):
+        return {
+            'id': 'env',
+            'name': 'env',
+            'file': None,
+            'ref': TTS_REF,
+            'transcript': TTS_PROMPT,
+            'lang': TTS_PROMPT_LANG,
+        }
+    return None
+
+
+def voice_public(voice):
+    if not voice:
+        return None
+    return {
+        'id': voice.get('id'),
+        'name': voice.get('name') or voice.get('id'),
+        'transcript': voice.get('transcript', ''),
+        'lang': voice.get('lang', 'zh'),
+    }
+
+
+def cache_path(text: str, lang: str, voice_id: str) -> str:
+    key = f'{TTS_CACHE_VERSION}|{voice_id}|{lang}|{text}'.encode('utf-8')
     return os.path.join(CACHE_DIR, hashlib.sha1(key).hexdigest() + '.wav')
 
 
@@ -59,19 +125,18 @@ def boost_wav(data: bytes, gain_db: float) -> bytes:
         return data
 
 
-def synth_gpt_sovits(text: str, lang: str) -> bytes:
-    if not TTS_REF:
-        raise RuntimeError('TTS_REF is not set; add a reference audio and export TTS_REF')
-    if not TTS_PROMPT:
-        raise RuntimeError('TTS_PROMPT is not set; export the reference audio transcript')
-    if not os.path.exists(TTS_REF):
-        raise FileNotFoundError(f'GPT-SoVITS reference audio not found: {TTS_REF}')
+def synth_gpt_sovits(text: str, lang: str, voice: dict) -> bytes:
+    ref = voice_file(voice)
+    if not ref or not os.path.exists(ref):
+        raise FileNotFoundError('no reference audio for the selected voice')
+    if not voice.get('transcript'):
+        raise RuntimeError('the selected voice has no transcript')
     payload = {
         'text': text,
         'text_lang': 'en' if lang == 'en' else 'zh',
-        'ref_audio_path': TTS_REF,
-        'prompt_text': TTS_PROMPT,
-        'prompt_lang': TTS_PROMPT_LANG,
+        'ref_audio_path': ref,
+        'prompt_text': voice['transcript'],
+        'prompt_lang': voice.get('lang', TTS_PROMPT_LANG),
         'text_split_method': 'cut5',
         'speed_factor': TTS_SPEED,
         'seed': TTS_SEED,
@@ -112,17 +177,21 @@ def synth_say(text: str, lang: str) -> bytes:
 
 def synth(text: str, lang: str) -> bytes:
     if TTS_ENGINE != 'say':
-        cp = cache_path(text, lang)
-        if os.path.exists(cp):
-            with open(cp, 'rb') as f:
-                return f.read()
-        try:
-            data = boost_wav(synth_gpt_sovits(text, lang), TTS_GAIN_DB)
-            with open(cp, 'wb') as f:
-                f.write(data)
-            return data
-        except Exception as e:
-            print(f'[tts] GPT-SoVITS failed, falling back to say: {e}', flush=True)
+        voice = current_voice()
+        if voice:
+            cp = cache_path(text, lang, voice.get('id', 'env'))
+            if os.path.exists(cp):
+                with open(cp, 'rb') as f:
+                    return f.read()
+            try:
+                data = boost_wav(synth_gpt_sovits(text, lang, voice), TTS_GAIN_DB)
+                with open(cp, 'wb') as f:
+                    f.write(data)
+                return data
+            except Exception as e:
+                print(f'[tts] GPT-SoVITS failed, falling back to say: {e}', flush=True)
+        else:
+            print('[tts] no voice selected, falling back to say', flush=True)
     return synth_say(text, lang)
 
 
@@ -133,7 +202,92 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_header('Expires', '0')
         super().end_headers()
 
+    def send_json(self, obj, status=200):
+        data = json.dumps(obj, ensure_ascii=False).encode('utf-8')
+        self.send_response(status)
+        self.send_header('Content-Type', 'application/json; charset=utf-8')
+        self.send_header('Content-Length', str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def read_json(self):
+        length = int(self.headers.get('Content-Length', 0))
+        if length <= 0 or length > MAX_VOICE_BYTES + 2 * 1024 * 1024:
+            raise ValueError('invalid body size')
+        body = self.rfile.read(length)
+        return json.loads(body.decode('utf-8'))
+
     def do_POST(self):
+        if self.path.startswith('/voice/select'):
+            try:
+                payload = self.read_json()
+                vid = str(payload.get('id', ''))
+                if vid not in INDEX['voices']:
+                    self.send_json({'ok': False, 'error': 'voice not found'}, 404)
+                    return
+                INDEX['current'] = vid
+                save_index()
+                self.send_json({'ok': True, 'current': voice_public(current_voice())})
+            except Exception as e:
+                self.send_json({'ok': False, 'error': str(e)}, 400)
+            return
+
+        if self.path.startswith('/voice/delete'):
+            try:
+                payload = self.read_json()
+                vid = str(payload.get('id', ''))
+                voice = INDEX['voices'].pop(vid, None)
+                if voice:
+                    path = voice_file(voice)
+                    if path and os.path.exists(path):
+                        os.remove(path)
+                    if INDEX.get('current') == vid:
+                        INDEX['current'] = next(iter(INDEX['voices']), None)
+                    save_index()
+                self.send_json({'ok': True, 'current': voice_public(current_voice())})
+            except Exception as e:
+                self.send_json({'ok': False, 'error': str(e)}, 400)
+            return
+
+        if self.path.startswith('/voice'):
+            try:
+                payload = self.read_json()
+                raw = str(payload.get('data', ''))
+                if ',' in raw and raw.startswith('data:'):
+                    raw = raw.split(',', 1)[1]
+                data = base64.b64decode(raw, validate=True)
+                if not data or len(data) > MAX_VOICE_BYTES:
+                    raise ValueError('audio file is empty or too large')
+                transcript = str(payload.get('transcript', '')).strip()
+                if not transcript:
+                    raise ValueError('transcript is required')
+                name = str(payload.get('name', '')).strip()[:60] or 'voice'
+                lang = str(payload.get('lang', 'zh')).strip() or 'zh'
+                ext = str(payload.get('ext', 'wav')).lower().lstrip('.')
+                ext = re.sub(r'[^a-z0-9]', '', ext)[:5] or 'wav'
+                if ext not in ALLOWED_EXT:
+                    raise ValueError('unsupported audio extension')
+                vid = uuid.uuid4().hex[:12]
+                filename = f'{vid}.{ext}'
+                path = os.path.join(VOICES_DIR, filename)
+                with open(path, 'wb') as f:
+                    f.write(data)
+                voice = {
+                    'id': vid,
+                    'name': name,
+                    'transcript': transcript,
+                    'lang': lang,
+                    'file': filename,
+                    'created': int(__import__('time').time()),
+                }
+                INDEX['voices'][vid] = voice
+                INDEX['current'] = vid
+                save_index()
+                self.send_json({'ok': True, 'current': voice_public(voice)})
+            except Exception as e:
+                self.send_json({'ok': False, 'error': str(e)}, 400)
+            return
+
         if self.path.startswith('/llm'):
             length = int(self.headers.get('Content-Length', 0))
             body = self.rfile.read(length)
@@ -167,6 +321,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_error(404)
 
     def do_GET(self):
+        if self.path.startswith('/voice'):
+            voices = [
+                voice_public(v)
+                for v in INDEX['voices'].values()
+                if v.get('id') and os.path.exists(voice_file(v) or '')
+            ]
+            self.send_json({'ok': True, 'current': voice_public(current_voice()), 'voices': voices})
+            return
         if self.path.startswith('/tts'):
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             text = (q.get('text') or [''])[0].strip()[:400]
@@ -189,7 +351,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 
 if __name__ == '__main__':
+    load_index()
     print(f'[tts] engine={TTS_ENGINE} api={TTS_API}', flush=True)
-    print(f'[tts] ref={TTS_REF}', flush=True)
+    print(f'[tts] voice={voice_public(current_voice())}', flush=True)
     print(f'[tts] cache={CACHE_DIR}', flush=True)
     http.server.ThreadingHTTPServer(('127.0.0.1', 8017), Handler).serve_forever()

@@ -52,6 +52,24 @@
       <select id="voiceMode"></select>
     </div>
 
+    <details class="voice-box" id="voiceBox">
+      <summary data-i18n="voiceCloneTitle"></summary>
+      <p class="hint" data-i18n="voiceCloneHint"></p>
+      <input id="voiceFile" type="file" accept="audio/*" />
+      <input id="voiceName" type="text" data-i18n-ph="voiceNamePh" />
+      <select id="voiceLang">
+        <option value="zh">中文参考音频</option>
+        <option value="en">English reference</option>
+      </select>
+      <textarea id="voicePrompt" rows="2" data-i18n-ph="voicePromptPh"></textarea>
+      <div class="row">
+        <button id="voiceUpload" data-i18n="voiceUpload"></button>
+        <button id="voiceRefresh" class="mini" data-i18n="voiceRefresh"></button>
+      </div>
+      <select id="voiceSelect"></select>
+      <p id="voiceStatus" class="hint"></p>
+    </details>
+
     <section class="ledger" aria-labelledby="ledgerTitle">
       <div class="ledger-head">
         <strong id="ledgerTitle" data-i18n="ledgerTitle"></strong>
@@ -78,6 +96,7 @@
       <button id="micBtn" type="button" class="mini" data-i18n="micStart"></button>
       <button id="chatSend" type="submit" class="mini" data-i18n="send"></button>
     </form>
+    </div>
   </aside>
 
   <script type="module" src="./src/main.js?v=39"></script>

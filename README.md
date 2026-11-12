@@ -16,6 +16,8 @@ the page and proxies model/TTS requests.
 - Short-term chat history and a small editable "story memory"
 - Autonomous gestures: nods when agreeing, shakes when disagreeing, waves on
   greetings/farewells, bows for thanks, cheers for good news, etc.
+- Voice cloning from the page: upload a 3–10 second clip + transcript to switch
+  the GPT-SoVITS voice
 - Perception ledger: shows what the model actually receives, with a pause switch
 
 ## Quick start
@@ -38,9 +40,15 @@ reactive-avatar/model.vrm
 
 Without it the app falls back to a simple placeholder character.
 
-### Optional: fixed custom voice
+### Optional: custom voice by uploading a file
 
-Install GPT-SoVITS separately, add a 3–10 second reference clip, then:
+Open the page, expand **声音克隆 / Voice cloning**, upload a clean 3–10 second
+clip, enter its exact transcript, and click **使用这个声音**. The server saves it
+under `voice/voices/` and switches TTS to that voice. Uploaded audio is
+git-ignored.
+
+You can also configure it from the command line. Install GPT-SoVITS separately,
+add a 3–10 second reference clip, then:
 
 ```sh
 export TTS_ENGINE=gpt-sovits

@@ -90,6 +90,21 @@ const I18N = {
     sttFail: '语音识别失败: ',
     micFail: '麦克风开启失败: ',
     greeting: '嗨，我是你的虚拟伙伴！开启摄像头和屏幕共享，我就能实时回应你。',
+    voiceCloneTitle: '声音克隆（上传参考音频）',
+    voiceCloneHint: '上传 3–10 秒干净人声，填写对应文字；会保存到本机并切换为该声音。',
+    voiceNamePh: '声音名称（如：小可）',
+    voicePromptPh: '这段音频里说的文字（必填）',
+    voiceUpload: '使用这个声音',
+    voiceRefresh: '刷新',
+    voiceUploading: '正在保存声音…',
+    voiceUploaded: '已切换声音：',
+    voiceNeedFile: '请先选择音频文件',
+    voiceNeedPrompt: '请填写参考音频对应的文字',
+    voiceTooLong: '参考音频建议 3–10 秒；当前为 ',
+    voiceLoadFail: '读取声音列表失败：',
+    voiceSelected: '已切换声音：',
+    voiceNone: '尚未选择克隆声音',
+    voiceCurrent: '当前声音：',
     speech: 'zh-CN', voicePrefix: 'zh',
   },
   en: {
@@ -130,6 +145,21 @@ const I18N = {
     sttFail: 'Transcription failed: ',
     micFail: 'Microphone failed: ',
     greeting: "Hi, I'm your virtual companion! Turn on the camera and share your screen, and I'll react in real time.",
+    voiceCloneTitle: 'Voice cloning (upload a reference)',
+    voiceCloneHint: 'Upload a clean 3–10 second voice clip and its transcript; it is saved locally and selected.',
+    voiceNamePh: 'Voice name (e.g. Xiao Ke)',
+    voicePromptPh: 'Exact words spoken in the clip (required)',
+    voiceUpload: 'Use this voice',
+    voiceRefresh: 'Refresh',
+    voiceUploading: 'Saving voice…',
+    voiceUploaded: 'Voice selected: ',
+    voiceNeedFile: 'Choose an audio file first',
+    voiceNeedPrompt: 'Enter the transcript of the reference clip',
+    voiceTooLong: 'Use a 3–10 second reference; this clip is ',
+    voiceLoadFail: 'Could not load voices: ',
+    voiceSelected: 'Voice selected: ',
+    voiceNone: 'No cloned voice selected',
+    voiceCurrent: 'Current voice: ',
     speech: 'en-US', voicePrefix: 'en',
   },
 };
@@ -226,6 +256,7 @@ function renderLedger() {
 function applyLang() {
   document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
   for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = t(el.dataset.i18n);
+  for (const el of document.querySelectorAll('[data-i18n-ph]')) el.placeholder = t(el.dataset.i18nPh);
   camBtn.textContent = t(camOn ? 'camOn' : 'camOff');
   shareBtn.textContent = t(screenOn ? 'shareOn' : 'shareOff');
   chatInput.placeholder = t('chatPh');
@@ -255,6 +286,133 @@ providerSel.onchange = () => {
 };
 voiceSel.onchange = () => {
   localStorage.setItem('voiceMode', voiceSel.value);
+};
+
+// ---------- 声音克隆 ----------
+const voiceFile = $('voiceFile');
+const voiceName = $('voiceName');
+const voiceLang = $('voiceLang');
+const voicePrompt = $('voicePrompt');
+const voiceUpload = $('voiceUpload');
+const voiceRefresh = $('voiceRefresh');
+const voiceSelect = $('voiceSelect');
+const voiceStatus = $('voiceStatus');
+let voiceData = { current: null, voices: [] };
+
+function setVoiceModeSystem() {
+  localStorage.setItem('voiceMode', 'system');
+  renderVoiceOptions();
+  voiceSel.value = 'system';
+}
+
+function renderVoiceList(data) {
+  voiceData = data || { current: null, voices: [] };
+  voiceSelect.innerHTML = '';
+  if (!voiceData.voices || !voiceData.voices.length) {
+    const o = document.createElement('option');
+    o.value = '';
+    o.textContent = t('voiceNone');
+    voiceSelect.append(o);
+    voiceStatus.textContent = t('voiceNone');
+    return;
+  }
+  for (const v of voiceData.voices) {
+    const o = document.createElement('option');
+    o.value = v.id;
+    o.textContent = v.name || v.id;
+    voiceSelect.append(o);
+  }
+  if (voiceData.current?.id) voiceSelect.value = voiceData.current.id;
+  voiceStatus.textContent = voiceData.current
+    ? t('voiceCurrent') + (voiceData.current.name || voiceData.current.id)
+    : t('voiceNone');
+}
+
+async function loadVoices() {
+  try {
+    const res = await fetch('/voice', { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    renderVoiceList(await res.json());
+  } catch (e) {
+    voiceStatus.textContent = t('voiceLoadFail') + e.message;
+  }
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(',')[1] || '');
+    r.onerror = () => reject(r.error || new Error('read failed'));
+    r.readAsDataURL(file);
+  });
+}
+
+voiceFile.onchange = () => {
+  const f = voiceFile.files?.[0];
+  if (!f) return;
+  const url = URL.createObjectURL(f);
+  const a = new Audio(url);
+  a.onloadedmetadata = () => {
+    const d = a.duration;
+    voiceStatus.textContent = `${f.name} · ${d.toFixed(1)}s`;
+    if (d < 3 || d > 10) voiceStatus.textContent = t('voiceTooLong') + `${d.toFixed(1)}s`;
+    URL.revokeObjectURL(url);
+  };
+  a.onerror = () => URL.revokeObjectURL(url);
+};
+
+voiceUpload.onclick = async () => {
+  const f = voiceFile.files?.[0];
+  if (!f) { voiceStatus.textContent = t('voiceNeedFile'); return; }
+  const transcript = voicePrompt.value.trim();
+  if (!transcript) { voiceStatus.textContent = t('voiceNeedPrompt'); return; }
+  voiceUpload.disabled = true;
+  voiceStatus.textContent = t('voiceUploading');
+  try {
+    const data = await fileToBase64(f);
+    const ext = (f.name.split('.').pop() || 'wav').toLowerCase();
+    const res = await fetch('/voice', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: voiceName.value.trim() || f.name.replace(/\.[^.]+$/, ''),
+        transcript,
+        lang: voiceLang.value,
+        ext,
+        data,
+      }),
+    });
+    const out = await res.json();
+    if (!res.ok || !out.ok) throw new Error(out.error || `HTTP ${res.status}`);
+    setVoiceModeSystem();
+    await loadVoices();
+    voiceStatus.textContent = t('voiceUploaded') + (out.current?.name || '');
+  } catch (e) {
+    voiceStatus.textContent = t('voiceLoadFail') + e.message;
+  } finally {
+    voiceUpload.disabled = false;
+  }
+};
+
+voiceRefresh.onclick = loadVoices;
+
+voiceSelect.onchange = async () => {
+  const id = voiceSelect.value;
+  if (!id) return;
+  try {
+    const res = await fetch('/voice/select', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    const out = await res.json();
+    if (!res.ok || !out.ok) throw new Error(out.error || `HTTP ${res.status}`);
+    setVoiceModeSystem();
+    voiceStatus.textContent = t('voiceSelected') + (out.current?.name || '');
+    if (voiceData.current) voiceData.current = out.current;
+  } catch (e) {
+    voiceStatus.textContent = t('voiceLoadFail') + e.message;
+  }
 };
 memoryBtn.onclick = () => {
   memoryOn = !memoryOn;
@@ -695,6 +853,7 @@ chatForm.onsubmit = async (e) => {
 };
 
 applyLang();
+loadVoices();
 setInterval(() => {
   if (!perceptionPaused) brain.tick();
   renderLedger();

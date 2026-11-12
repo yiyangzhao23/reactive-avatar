@@ -3,11 +3,16 @@
 The avatar works without this folder: if GPT-SoVITS is unavailable, `/tts`
 falls back to macOS `say`.
 
-To use a fixed, custom voice:
+## From the page
 
-1. Install GPT-SoVITS somewhere local (see its README).
-2. Put a 3–10 second clean reference recording in this folder, e.g.
-   `voice/reference.wav`.
+Open the page, expand **声音克隆 / Voice cloning**, upload a clean 3–10 second
+reference clip, enter its exact transcript, then click **使用这个声音**. The clip
+is saved under `voice/voices/` (git-ignored), and the server switches to it.
+
+## From the command line
+
+1. Install GPT-SoVITS somewhere local.
+2. Put a 3–10 second clean reference recording in this folder.
 3. Start the GPT-SoVITS API:
 
    ```sh
@@ -44,5 +49,5 @@ audio to a public repository.
 
 ## Note
 
-`start_tts.sh` expects GPT-SoVITS to be installed at `../.gsv/GPT-SoVITS`
-relative to this project. Adjust `BASE` if yours is elsewhere.
+`start_tts.sh` expects GPT-SoVITS at `../.gsv/GPT-SoVITS` relative to this
+project. Adjust `GSV_DIR`, `GSV_PYENV`, or `CONDA_SH` if yours is elsewhere.

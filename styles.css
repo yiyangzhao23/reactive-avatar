@@ -77,3 +77,15 @@ select {
 
 .chat button { flex: 0 0 auto; }
 .chat button.recording { background: #e5484d; }
+
+.voice-box {
+  border: 1px solid #2a2f4a; border-radius: 10px; padding: 10px;
+  background: #12162a; display: flex; flex-direction: column; gap: 8px;
+}
+.voice-box summary { cursor: pointer; font-size: 12px; color: #cdd3ff; }
+.voice-box input[type="file"] { font-size: 11px; color: #9aa1c0; }
+.voice-box input[type="text"], .voice-box textarea, .voice-box select {
+  width: 100%; padding: 7px 8px; border-radius: 8px; border: 1px solid #2a2f4a;
+  background: #0f1220; color: #e8eaf2; font-size: 12px; font-family: inherit;
+}
+.voice-box textarea { resize: vertical; min-height: 48px; }
