@@ -298,6 +298,7 @@ const voiceRefresh = $('voiceRefresh');
 const voiceSelect = $('voiceSelect');
 const voiceStatus = $('voiceStatus');
 let voiceData = { current: null, voices: [] };
+let voiceDuration = 0;
 
 function setVoiceModeSystem() {
   localStorage.setItem('voiceMode', 'system');
@@ -354,6 +355,7 @@ voiceFile.onchange = () => {
   const a = new Audio(url);
   a.onloadedmetadata = () => {
     const d = a.duration;
+    voiceDuration = d;
     voiceStatus.textContent = `${f.name} · ${d.toFixed(1)}s`;
     if (d < 3 || d > 10) voiceStatus.textContent = t('voiceTooLong') + `${d.toFixed(1)}s`;
     URL.revokeObjectURL(url);
@@ -364,6 +366,10 @@ voiceFile.onchange = () => {
 voiceUpload.onclick = async () => {
   const f = voiceFile.files?.[0];
   if (!f) { voiceStatus.textContent = t('voiceNeedFile'); return; }
+  if (voiceDuration && (voiceDuration < 3 || voiceDuration > 10)) {
+    voiceStatus.textContent = t('voiceTooLong') + `${voiceDuration.toFixed(1)}s`;
+    return;
+  }
   const transcript = voicePrompt.value.trim();
   if (!transcript) { voiceStatus.textContent = t('voiceNeedPrompt'); return; }
   voiceUpload.disabled = true;
