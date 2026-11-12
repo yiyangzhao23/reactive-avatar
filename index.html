@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Reactive Avatar 原型</title>
+<link rel="stylesheet" href="./styles.css" />
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.167.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/",
+    "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.3.5/lib/three-vrm.module.js",
+    "@mediapipe/tasks-vision": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs"
+  }
+}
+</script>
+</head>
+<body>
+  <div id="stage"><canvas id="scene"></canvas></div>
+
+  <aside id="panel">
+    <div class="panel-scroll">
+
+    <div class="row">
+      <select id="lang">
+        <option value="zh">中文</option>
+        <option value="en">English</option>
+      </select>
+      <select id="provider">
+        <option value="deepseek">DeepSeek</option>
+        <option value="gemini">Gemini</option>
+        <option value="opencode">OpenCode</option>
+      </select>
+    </div>
+    <div class="row">
+      <input id="apiKey" type="password" placeholder="API Key" />
+      <button id="saveKey" class="mini" data-i18n="save"></button>
+    </div>
+    <div class="row">
+      <button id="camBtn" data-i18n="camOff"></button>
+      <button id="shareBtn" data-i18n="shareOff"></button>
+    </div>
+    <div class="row">
+      <button id="analyzeBtn" data-i18n="analyze"></button>
+    </div>
+    <div class="row">
+      <button id="memoryBtn" data-i18n="memoryOff"></button>
+      <button id="clearMemory" class="mini" data-i18n="clearMemory"></button>
+    </div>
+    <div class="row">
+      <select id="voiceMode"></select>
+    </div>
+
+    <section class="ledger" aria-labelledby="ledgerTitle">
+      <div class="ledger-head">
+        <strong id="ledgerTitle" data-i18n="ledgerTitle"></strong>
+        <button id="pausePerception" class="mini" data-i18n="pauseOff"></button>
+      </div>
+      <p class="hint" data-i18n="ledgerHint"></p>
+      <pre id="ledger"></pre>
+    </section>
+
+    <div class="status">
+      <span id="camDot" class="dot"></span><span data-i18n="stCam"></span>
+      <span id="shareDot" class="dot"></span><span data-i18n="stScreen"></span>
+      <span id="faceDot" class="dot"></span><span data-i18n="stFace"></span>
+      <span id="emoBadge" class="badge">neutral</span>
+    </div>
+    <p id="voiceInfo" class="voice"></p>
+
+    <video id="camPreview" autoplay playsinline muted></video>
+    <video id="screenVideo" autoplay playsinline muted class="hidden"></video>
+
+    <div id="log"></div>
+    <form id="chatForm" class="chat">
+      <input id="chatInput" type="text" autocomplete="off" />
+      <button id="micBtn" type="button" class="mini" data-i18n="micStart"></button>
+      <button id="chatSend" type="submit" class="mini" data-i18n="send"></button>
+    </form>
+  </aside>
+
+  <script type="module" src="./src/main.js?v=39"></script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+*.log
+.env
+.env.*
+
+# Local model / voice data (large, private, or licensed separately)
+model.vrm
+voice/cache/
+voice/*.wav
+voice/*.m4a
+voice/*.mp3
+voice/*.txt
+
+# Local GPT-SoVITS install and env
+.gsv/
+.venv/
+node_modules/
