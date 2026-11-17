@@ -57,6 +57,7 @@ class VRMAvatar {
     this.weights = Object.fromEntries(EMOTION_KEYS.map((k) => [k, 0]));
     this.gaze = new THREE.Vector2(0, 0);
     this.talking = false;
+    this.mouthOverride = null;
     this.headBias = new THREE.Vector2(0, 0);
     this.headBiasTarget = new THREE.Vector2(0, 0);
     this.turnVel = 0;
@@ -266,6 +267,10 @@ class VRMAvatar {
 
   setTalking(on) { this.talking = on; }
 
+  setMouth(value) {
+    this.mouthOverride = value == null ? null : Math.max(0, Math.min(1, value));
+  }
+
   update(dt, t) {
     const em = this.vrm.expressionManager;
     if (em) {
@@ -274,7 +279,9 @@ class VRMAvatar {
         this.weights[k] += (goal - this.weights[k]) * Math.min(1, dt * 6);
         try { em.setValue(k, this.weights[k]); } catch { /* 缺该表情 */ }
       }
-      const mouth = this.talking ? (0.4 + 0.35 * Math.sin(t * 16)) : 0;
+      const mouth = this.mouthOverride != null
+        ? this.mouthOverride
+        : (this.talking ? (0.4 + 0.35 * Math.sin(t * 16)) : 0);
       try { em.setValue('aa', mouth); } catch { /* noop */ }
 
       this.nextBlink -= dt;
@@ -333,6 +340,7 @@ class PlaceholderAvatar {
   setEmotion(name) { this.emotion = name; }
   setGaze(x, y) { this.gaze = { x, y }; }
   setTalking(on) { this.talking = on; }
+  setMouth() {}
   setYaw(y) { this.group.rotation.y = y; }
   lookAtWorld() {}
   setHeadBias(x, y) { this.headBias = { x, y }; }

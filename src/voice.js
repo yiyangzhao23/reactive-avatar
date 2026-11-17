@@ -112,3 +112,60 @@ export async function transcribe(blob, key, langName) {
   const text = json.candidates?.[0]?.content?.parts?.map((p) => p.text).join('') ?? '';
   return text.trim();
 }
+
+// ---------- hands-free continuous recognition ----------
+let handsFreeRec = null;
+
+export function stopHandsFree() {
+  if (!handsFreeRec) return;
+  const rec = handsFreeRec;
+  handsFreeRec = null;
+  try { rec.stop(); } catch {}
+}
+
+export async function startHandsFree({ lang = 'zh', onInterim, onFinal, onSpeechStart, onError, onStart } = {}) {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return false;
+  const rec = new SR();
+  try { rec.lang = lang === 'en' ? 'en-US' : 'zh-CN'; } catch {}
+  rec.continuous = true;
+  rec.interimResults = true;
+  rec.maxAlternatives = 1;
+  let stopped = false;
+  rec.onstart = () => onStart?.();
+  rec.onspeechstart = () => onSpeechStart?.();
+  rec.onresult = (e) => {
+    let interim = '';
+    let final = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const txt = e.results[i][0]?.transcript || '';
+      if (e.results[i].isFinal) final += txt;
+      else interim += txt;
+    }
+    if (interim.trim()) onInterim?.(interim.trim());
+    if (final.trim()) onFinal?.(final.trim());
+  };
+  rec.onerror = (e) => {
+    if (e.error === 'no-speech' || e.error === 'aborted') return;
+    onError?.(e.error || 'speech error');
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+      stopped = true;
+      handsFreeRec = null;
+      try { rec.stop(); } catch {}
+    }
+  };
+  rec.onend = () => {
+    if (!stopped && handsFreeRec === rec) {
+      try { rec.start(); } catch {}
+    }
+  };
+  handsFreeRec = rec;
+  try {
+    rec.start();
+    return true;
+  } catch (e) {
+    handsFreeRec = null;
+    onError?.(e.message || String(e));
+    return false;
+  }
+}

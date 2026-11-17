@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { createAvatar } from './avatar.js?v=11';
 import { startCamera, startScreenShare, startFaceTracking, stopCamera, stopScreenShare, captureScreen, state } from './perception.js?v=11';
 import { Brain } from './brain.js?v=11';
-import { startRecording, stopRecording, transcribe } from './voice.js?v=11';
+import { startRecording, stopRecording, transcribe, startHandsFree, stopHandsFree } from './voice.js?v=11';
 
 const canvas = document.getElementById('scene');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -76,6 +76,8 @@ const I18N = {
     camOpen: '摄像头打开啦，我能看到你了！',
     shareOpen: '我现在能看到你的屏幕了！',
     thinking: '正在思考…',
+    chatError: '回复失败：',
+    remembered: '好，我记住了。',
     analyze: '分析当前画面',
     analyzing: '正在分析画面…',
     needScreen: '请先点“共享屏幕”，再分析',
@@ -90,6 +92,13 @@ const I18N = {
     sttFail: '语音识别失败: ',
     micFail: '麦克风开启失败: ',
     greeting: '嗨，我是你的虚拟伙伴！开启摄像头和屏幕共享，我就能实时回应你。',
+    handsFreeStart: '连续语音',
+    handsFreeStop: '停止连续语音',
+    handsFreeOn: '连续语音已开启，直接说话即可。',
+    handsFreeOff: '连续语音已关闭。',
+    handsFreeUnsupported: '此浏览器不支持连续语音识别，请用麦克风按钮录音。',
+    handsFreeError: '连续语音出错：',
+    listening: '在听…',
     voiceCloneTitle: '声音克隆（上传参考音频）',
     voiceCloneHint: '上传 3–10 秒干净人声，填写对应文字；会保存到本机并切换为该声音。',
     voiceNamePh: '声音名称（如：小可）',
@@ -131,6 +140,8 @@ const I18N = {
     camOpen: 'Camera is on — I can see you now!',
     shareOpen: 'I can see your screen now!',
     thinking: 'Thinking…',
+    chatError: 'Reply failed: ',
+    remembered: 'Got it, I will remember that.',
     analyze: 'Analyze screen',
     analyzing: 'Analyzing the screen…',
     needScreen: 'Click “Share screen” first, then analyze',
@@ -145,6 +156,13 @@ const I18N = {
     sttFail: 'Transcription failed: ',
     micFail: 'Microphone failed: ',
     greeting: "Hi, I'm your virtual companion! Turn on the camera and share your screen, and I'll react in real time.",
+    handsFreeStart: 'Hands-free',
+    handsFreeStop: 'Stop hands-free',
+    handsFreeOn: 'Hands-free on. Just speak.',
+    handsFreeOff: 'Hands-free off.',
+    handsFreeUnsupported: 'This browser does not support continuous speech recognition. Use the mic button.',
+    handsFreeError: 'Hands-free error: ',
+    listening: 'Listening…',
     voiceCloneTitle: 'Voice cloning (upload a reference)',
     voiceCloneHint: 'Upload a clean 3–10 second voice clip and its transcript; it is saved locally and selected.',
     voiceNamePh: 'Voice name (e.g. Xiao Ke)',
@@ -209,16 +227,55 @@ function loadMemory() {
 function saveMemory(list) {
   localStorage.setItem('storyMemory', JSON.stringify(list.slice(-25)));
 }
-function memoryContext() {
+async function postMemory(text, source = 'user', ttlDays = 30) {
+  try {
+    await fetch('/memory', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, source, ttl_days: ttlDays }),
+    });
+  } catch {}
+}
+
+async function memoryContext(query = '') {
+  try {
+    const res = await fetch('/memory/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, limit: 8 }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const rows = data.memories || [];
+      if (rows.length) return rows.map((e, i) => `${i + 1}. ${e.text}`).join('\n').slice(-3000);
+    }
+    const recent = await fetch('/memory?limit=8', { cache: 'no-store' });
+    if (recent.ok) {
+      const data = await recent.json();
+      const rows = data.memories || [];
+      if (rows.length) return rows.map((e, i) => `${i + 1}. ${e.text}`).join('\n').slice(-3000);
+    }
+  } catch {}
   const m = loadMemory();
   if (!m.length) return '';
   return m.map((e, i) => `${i + 1}. ${e.text}`).join('\n').slice(-3000);
 }
+async function refreshMemoryCount() {
+  try {
+    const res = await fetch('/memory?limit=50', { cache: 'no-store' });
+    if (!res.ok) return;
+    const data = await res.json();
+    const n = Math.max(loadMemory().length, (data.memories || []).length);
+    memoryBtn.textContent = t(memoryOn ? 'memoryOn' : 'memoryOff') + (memoryOn && n ? ` (${n})` : '');
+  } catch {}
+}
+
 function renderMemory() {
   const n = loadMemory().length;
   memoryBtn.textContent = t(memoryOn ? 'memoryOn' : 'memoryOff') + (memoryOn && n ? ` (${n})` : '');
   memoryBtn.classList.toggle('active', memoryOn);
   renderLedger();
+  refreshMemoryCount();
 }
 
 function perceptionSummary() {
@@ -426,8 +483,9 @@ memoryBtn.onclick = () => {
   renderMemory();
   log(t(memoryOn ? 'memoryOn' : 'memoryOff'));
 };
-$('clearMemory').onclick = () => {
+$('clearMemory').onclick = async () => {
   saveMemory([]);
+  try { await fetch('/memory/clear', { method: 'POST' }); } catch {}
   renderMemory();
   log(t('memoryCleared'));
 };
@@ -492,7 +550,7 @@ shareBtn.onclick = async () => {
 };
 
 const analyzeBtn = $('analyzeBtn');
-analyzeBtn.onclick = async () => {
+async function analyzeScreen() {
   if (perceptionPaused) { log(t('ledgerPaused')); return; }
   if (!state.screen.on) { log(t('needScreen')); return; }
   const provider = getProvider();
@@ -503,7 +561,7 @@ analyzeBtn.onclick = async () => {
   try {
     const img = captureScreen();
     if (!img) throw new Error('no frame');
-    const mem = memoryOn ? memoryContext() : '';
+    const mem = memoryOn ? await memoryContext('') : '';
     let prompt;
     if (memoryOn) {
       prompt = lang === 'zh'
@@ -573,6 +631,7 @@ memory: one sentence of new long-term fact; empty string if nothing new.`;
           const list = loadMemory();
           list.push({ at: Date.now(), text: out.memory.trim() });
           saveMemory(list);
+          await postMemory(out.memory.trim(), 'screen', 30);
           renderMemory();
           log(t('memoryAdded'));
         }
@@ -585,7 +644,8 @@ memory: one sentence of new long-term fact; empty string if nothing new.`;
   } finally {
     analyzeBtn.disabled = false;
   }
-};
+}
+analyzeBtn.onclick = analyzeScreen;
 
 function log(text, emotion, isUser = false, extraClass = '') {
   const p = document.createElement('p');
@@ -650,6 +710,68 @@ function getAudioCtx() {
   return audioCtx;
 }
 
+let visemeTimer = null;
+
+function splitSentences(text) {
+  const clean = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!clean) return [];
+  const raw = clean.match(/[^。！？!?；;\n]+[。！？!?；;]?/g) || [clean];
+  const out = [];
+  for (let part of raw) {
+    part = part.trim();
+    if (!part) continue;
+    while (part.length > 90) {
+      out.push(part.slice(0, 90));
+      part = part.slice(90);
+    }
+    out.push(part);
+  }
+  return out;
+}
+
+function visemeForChar(ch) {
+  if (/[aàáǎāA]/.test(ch)) return 0.9;
+  if (/[oōóǒòO]/.test(ch)) return 0.75;
+  if (/[eēéěèE]/.test(ch)) return 0.55;
+  if (/[iīíǐìI]/.test(ch)) return 0.35;
+  if (/[uūúǔùUüv]/.test(ch)) return 0.45;
+  if (/[啊阿]/.test(ch)) return 0.9;
+  if (/[哦噢喔]/.test(ch)) return 0.75;
+  if (/[诶欸]/.test(ch)) return 0.55;
+  if (/[衣一]/.test(ch)) return 0.35;
+  if (/[乌无]/.test(ch)) return 0.45;
+  if (/[\s，。！？、；：,.!?;:…—]/.test(ch)) return 0;
+  return 0.18;
+}
+
+function scheduleVisemes(text, durationSec) {
+  if (visemeTimer) { clearInterval(visemeTimer); visemeTimer = null; }
+  const chars = Array.from(String(text || ''));
+  if (!chars.length || !durationSec) return;
+  const start = performance.now();
+  visemeTimer = setInterval(() => {
+    const t = (performance.now() - start) / 1000;
+    if (t >= durationSec) {
+      clearInterval(visemeTimer);
+      visemeTimer = null;
+      avatar?.setMouth?.(null);
+      return;
+    }
+    const idx = Math.min(chars.length - 1, Math.floor((t / durationSec) * chars.length));
+    avatar?.setMouth?.(visemeForChar(chars[idx]));
+  }, 60);
+}
+
+function stopSpeaking() {
+  speakSeq++;
+  if (audioEl) { try { audioEl.pause(); } catch {} audioEl = null; }
+  if (audioSrc) { try { audioSrc.stop(); } catch {} audioSrc = null; }
+  if ('speechSynthesis' in window) { try { speechSynthesis.cancel(); } catch {} }
+  if (visemeTimer) { clearInterval(visemeTimer); visemeTimer = null; }
+  setTalking(false);
+  avatar?.setMouth?.(null);
+}
+
 async function speakGemini(text, voiceName, seq) {
   const key = localStorage.getItem('geminiKey');
   if (!key) throw new Error('no gemini key');
@@ -692,54 +814,94 @@ async function speakGemini(text, voiceName, seq) {
   src.connect(ctx.destination);
   audioSrc = src;
   setTalking(true);
-  src.onended = () => { if (audioSrc === src) setTalking(false); };
-  src.start();
+  scheduleVisemes(text, buf.duration);
+  return new Promise((resolve) => {
+    src.onended = () => {
+      if (audioSrc === src) {
+        audioSrc = null;
+        setTalking(false);
+        avatar?.setMouth?.(null);
+      }
+      resolve();
+    };
+    src.start();
+  });
 }
 
-// 优先 Gemini 自然语音（需 Gemini Key），否则用本地服务器 say
+async function speakServerPart(text, seq) {
+  const L = I18N[lang];
+  const res = await fetch(`/tts?lang=${L.voicePrefix}&text=${encodeURIComponent(text)}`);
+  if (!res.ok) throw new Error(`TTS HTTP ${res.status}`);
+  const blob = await res.blob();
+  if (seq !== speakSeq) return;
+  const url = URL.createObjectURL(blob);
+  const el = new Audio(url);
+  audioEl = el;
+  let duration = 0;
+  const meta = new Promise((resolve) => {
+    el.onloadedmetadata = () => { duration = el.duration; resolve(); };
+    setTimeout(resolve, 1200);
+  });
+  el.onplay = () => setTalking(true);
+  await el.play();
+  await meta;
+  if (seq !== speakSeq) {
+    el.pause();
+    URL.revokeObjectURL(url);
+    return;
+  }
+  scheduleVisemes(text, duration || Math.max(1.2, text.length * 0.16));
+  await new Promise((resolve) => {
+    el.onended = el.onerror = () => {
+      if (audioEl === el) {
+        audioEl = null;
+        setTalking(false);
+        avatar?.setMouth?.(null);
+      }
+      URL.revokeObjectURL(url);
+      resolve();
+    };
+  });
+}
+
 async function speak(text) {
-  const seq = ++speakSeq;
+  stopSpeaking();
+  const seq = speakSeq;
   const mode = localStorage.getItem('voiceMode') || 'gemini:Aoede';
-  if (mode.startsWith('gemini:')) {
+  const parts = splitSentences(text);
+  for (const part of parts) {
+    if (seq !== speakSeq) return;
+    if (mode.startsWith('gemini:')) {
+      try {
+        await speakGemini(part, mode.slice(7), seq);
+        if (!voiceLogged) {
+          voiceLogged = true;
+          const info = document.getElementById('voiceInfo');
+          if (info) info.textContent = `语音: Gemini ${mode.slice(7)}`;
+        }
+        continue;
+      } catch (e) {
+        console.warn('Gemini 语音失败，回退服务器语音', e);
+      }
+    }
     try {
-      await speakGemini(text, mode.slice(7), seq);
+      await speakServerPart(part, seq);
       if (!voiceLogged) {
         voiceLogged = true;
         const info = document.getElementById('voiceInfo');
-        if (info) info.textContent = `语音: Gemini ${mode.slice(7)}`;
+        if (info) info.textContent = lang === 'zh' ? '语音: 服务器 TTS' : '语音: Server TTS';
       }
-      return;
     } catch (e) {
-      console.warn('Gemini 语音失败，回退服务器语音', e);
-    }
-  }
-  const L = I18N[lang];
-  try {
-    const res = await fetch(`/tts?lang=${L.voicePrefix}&text=${encodeURIComponent(text)}`);
-    if (!res.ok) throw new Error(`TTS HTTP ${res.status}`);
-    const blob = await res.blob();
-    if (seq !== speakSeq) return;
-    const url = URL.createObjectURL(blob);
-    if (audioEl) audioEl.pause();
-    const el = new Audio(url);
-    audioEl = el;
-    el.onplay = () => setTalking(true);
-    el.onended = el.onerror = () => { setTalking(false); URL.revokeObjectURL(url); };
-    if (!voiceLogged) {
-      voiceLogged = true;
-      const info = document.getElementById('voiceInfo');
-      if (info) info.textContent = lang === 'zh' ? '语音: 婷婷（服务器 TTS）' : '语音: Samantha（服务器 TTS）';
-    }
-    await el.play();
-  } catch (e) {
-    if (seq !== speakSeq) return;
-    if (e.name === 'NotAllowedError') {
-      pendingSpeech = text;
-      armResume();
+      if (seq !== speakSeq) return;
+      if (e.name === 'NotAllowedError') {
+        pendingSpeech = text;
+        armResume();
+        return;
+      }
+      console.warn('服务器 TTS 失败', e);
+      if (!isSafari) speakBrowser(text);
       return;
     }
-    console.warn('服务器 TTS 失败', e);
-    if (!isSafari) speakBrowser(text);
   }
 }
 
@@ -807,7 +969,46 @@ brain.emit = (emotion, line, action = 'none') => {
 
 // ---------- 语音聊天 ----------
 const micBtn = $('micBtn');
+const handsFreeBtn = $('handsFreeBtn');
 let voiceRec = false;
+let handsFreeOn = false;
+
+async function sendUserText(text) {
+  const line = String(text || '').trim();
+  if (!line) return;
+  log(line, null, true);
+  avatar?.setEmotion('relaxed');
+
+  const remember = line.match(/^(?:请|帮我)?记住[：:，,\s]*(.+)$/s) || line.match(/^remember[:\s]+(.+)$/is);
+  if (remember) {
+    const fact = remember[1].trim();
+    await postMemory(fact, 'user', 30);
+    renderMemory();
+    log(t('memoryAdded'));
+    react('happy', t('remembered'), 'nod');
+    return;
+  }
+  if (/(看|总结|分析).{0,12}(屏幕|画面)|summarize.{0,20}screen|look at.{0,20}screen/i.test(line)) {
+    await analyzeScreen();
+    return;
+  }
+
+  const thinking = log(t('thinking'), null, false, 'thinking');
+  chatSend.disabled = true;
+  try {
+    const context = memoryOn ? await memoryContext(line) : '';
+    const reply = await brain.chatUser(line, context);
+    thinking.remove();
+    chatSend.disabled = false;
+    chatInput.focus();
+    react(reply.emotion, reply.line, reply.action);
+  } catch (e) {
+    thinking.remove();
+    chatSend.disabled = false;
+    log(t('chatError') + e.message);
+  }
+}
+
 micBtn.onclick = async () => {
   if (!voiceRec) {
     try {
@@ -830,14 +1031,45 @@ micBtn.onclick = async () => {
     const text = await transcribe(blob, gk, lang === 'zh' ? 'Mandarin Chinese' : 'English');
     thinking.remove();
     if (!text) { log(t('noSpeech')); return; }
-    log(text, null, true);
-    avatar?.setEmotion('relaxed');
-    const reply = await brain.chatUser(text, memoryOn ? memoryContext() : '');
-    react(reply.emotion, reply.line, reply.action);
+    await sendUserText(text);
   } catch (e) {
     thinking.remove();
     log(t('sttFail') + e.message);
   }
+};
+
+handsFreeBtn.onclick = async () => {
+  if (handsFreeOn) {
+    stopHandsFree();
+    handsFreeOn = false;
+    handsFreeBtn.classList.remove('active');
+    handsFreeBtn.textContent = t('handsFreeStart');
+    log(t('handsFreeOff'));
+    return;
+  }
+  const ok = await startHandsFree({
+    lang,
+    onStart: () => log(t('handsFreeOn')),
+    onInterim: (txt) => { chatInput.value = txt; },
+    onSpeechStart: () => { if (speaking) stopSpeaking(); },
+    onFinal: (txt) => {
+      chatInput.value = '';
+      sendUserText(txt);
+    },
+    onError: (e) => {
+      log(t('handsFreeError') + e);
+      if (/not-allowed|service-not-allowed/.test(String(e))) {
+        stopHandsFree();
+        handsFreeOn = false;
+        handsFreeBtn.classList.remove('active');
+        handsFreeBtn.textContent = t('handsFreeStart');
+      }
+    },
+  });
+  if (!ok) { log(t('handsFreeUnsupported')); return; }
+  handsFreeOn = true;
+  handsFreeBtn.classList.add('active');
+  handsFreeBtn.textContent = t('handsFreeStop');
 };
 
 // ---------- 打字聊天 ----------
@@ -847,19 +1079,15 @@ chatForm.onsubmit = async (e) => {
   const text = chatInput.value.trim();
   if (!text) return;
   chatInput.value = '';
-  log(text, null, true);
-  avatar?.setEmotion('relaxed');
-  const thinking = log(t('thinking'), null, false, 'thinking');
-  chatSend.disabled = true;
-  const reply = await brain.chatUser(text, memoryOn ? memoryContext() : '');
-  thinking.remove();
-  chatSend.disabled = false;
-  chatInput.focus();
-  react(reply.emotion, reply.line, reply.action);
+  await sendUserText(text);
 };
 
 applyLang();
 loadVoices();
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch((e) => console.warn('service worker failed', e));
+}
 setInterval(() => {
   if (!perceptionPaused) brain.tick();
   renderLedger();

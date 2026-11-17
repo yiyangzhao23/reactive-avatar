@@ -13,12 +13,17 @@ the page and proxies model/TTS requests.
 - Screen sharing + local brightness sensing + optional vision-model screenshots
 - Providers: DeepSeek (text), Gemini (multimodal), OpenCode (Console)
 - Local TTS via macOS `say`; optional fixed voice via GPT-SoVITS
-- Short-term chat history and a small editable "story memory"
-- Autonomous gestures: nods when agreeing, shakes when disagreeing, waves on
-  greetings/farewells, bows for thanks, cheers for good news, etc.
+- Hands-free voice mode: browser speech recognition with interim transcripts,
+  automatic sentence-level TTS, and barge-in interruption
+- Text-driven viseme lip-sync and autonomous gestures: nods when agreeing,
+  shakes when disagreeing, waves on greetings/farewells, bows for thanks,
+  cheers for good news, etc.
 - Voice cloning from the page: upload a 3–10 second clip + transcript to switch
   the GPT-SoVITS voice
+- SQLite memory with source, expiry, keyword search, and "remember this"
+- Tool intents: "summarize my screen" and "remember this"
 - Perception ledger: shows what the model actually receives, with a pause switch
+- PWA: installable from the browser; service worker caches the shell
 
 ## Quick start
 
@@ -71,8 +76,8 @@ camera / screen
   → observation summary (+ optional screenshot)
   → /llm or provider API
   → JSON {emotion, line, action}
-  → VRM expression + gesture + TTS
-  → localStorage memory
+  → VRM expression + viseme + gesture + sentence-level TTS
+  → SQLite memory (source, expiry, search)
 ```
 
 | Path | Purpose |
@@ -83,8 +88,9 @@ camera / screen
 | `src/avatar.js` | Three.js + VRM avatar, expressions, gestures |
 | `src/perception.js` | webcam, screen share, MediaPipe |
 | `src/brain.js` | model calls, prompts, memory, autonomous gesture inference |
-| `src/voice.js` | microphone recording + transcription |
-| `server.py` | static server, `/llm` proxy, `/tts` |
+| `src/voice.js` | microphone recording, transcription, hands-free recognition |
+| `server.py` | static server, `/llm`, `/tts`, `/voice`, `/memory` |
+| `manifest.webmanifest`, `sw.js` | PWA install + shell cache |
 | `voice/` | optional GPT-SoVITS setup |
 
 ## Gestures
@@ -107,12 +113,21 @@ Explicit requests such as “挥挥手” or “点点头” also work.
 - Webcam and screen frames stay local unless you use a vision provider.
 - API keys live in `localStorage`; this is a prototype, not a secure product.
 - The server binds to `127.0.0.1` and has no authentication or rate limiting.
-- Memory is a small `localStorage` list with no provenance or expiry.
+- Memory is stored locally in `memory.db`; it has source and expiry fields, but
+  the prototype does not encrypt the database.
+- Hands-free recognition uses the browser's speech service; availability and
+  language support depend on the browser.
 - Do not clone a voice without consent. Raw recordings are git-ignored.
+
+## Install as an app
+
+Serve the page from `http://127.0.0.1:8017/` and use the browser's install
+button. The manifest and service worker cache the app shell; model/TTS/memory
+requests always go to the local server.
 
 ## Not included
 
 - `model.vrm` (add your own, with a compatible license)
 - voice recordings, reference audio, test audio
 - `.gsv/` (local GPT-SoVITS install and models)
-- API keys
+- `memory.db` and API keys (local runtime data)

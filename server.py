@@ -6,6 +6,7 @@ import io
 import json
 import os
 import re
+import sqlite3
 import subprocess
 import tempfile
 import urllib.error
@@ -13,6 +14,7 @@ import urllib.parse
 import urllib.request
 import uuid
 import wave
+from datetime import datetime, timedelta, timezone
 
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -20,6 +22,7 @@ VOICE_DIR = os.path.join(ROOT, 'voice')
 VOICES_DIR = os.path.join(VOICE_DIR, 'voices')
 CACHE_DIR = os.path.join(VOICE_DIR, 'cache')
 INDEX_PATH = os.path.join(VOICES_DIR, 'index.json')
+DB_PATH = os.path.join(ROOT, 'memory.db')
 os.makedirs(VOICES_DIR, exist_ok=True)
 os.makedirs(CACHE_DIR, exist_ok=True)
 
@@ -54,6 +57,95 @@ def save_index():
     with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(INDEX, f, ensure_ascii=False, indent=2)
     os.replace(tmp, INDEX_PATH)
+
+
+def init_memory():
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS memories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                text TEXT NOT NULL,
+                source TEXT NOT NULL DEFAULT 'user',
+                tags TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                expires_at TEXT
+            )
+            """
+        )
+        conn.commit()
+
+
+def now_iso():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def prune_memory(conn):
+    conn.execute('DELETE FROM memories WHERE expires_at IS NOT NULL AND expires_at <= ?', (now_iso(),))
+
+
+def memory_public(row):
+    return {
+        'id': row['id'],
+        'text': row['text'],
+        'source': row['source'],
+        'tags': row['tags'],
+        'created_at': row['created_at'],
+        'expires_at': row['expires_at'],
+    }
+
+
+def memory_list(limit=20):
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        prune_memory(conn)
+        rows = conn.execute(
+            'SELECT * FROM memories ORDER BY created_at DESC LIMIT ?', (max(1, min(100, int(limit))),)
+        ).fetchall()
+        conn.commit()
+        return [memory_public(r) for r in rows]
+
+
+def memory_add(text, source='user', tags='', ttl_days=30):
+    text = str(text or '').strip()
+    if not text:
+        raise ValueError('memory text is required')
+    ttl_days = float(ttl_days) if ttl_days is not None else 0
+    expires = (datetime.now(timezone.utc) + timedelta(days=ttl_days)).isoformat() if ttl_days > 0 else None
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.execute(
+            'INSERT INTO memories (text, source, tags, created_at, expires_at) VALUES (?, ?, ?, ?, ?)',
+            (text[:2000], str(source or 'user')[:40], str(tags or '')[:200], now_iso(), expires),
+        )
+        conn.commit()
+        row = conn.execute('SELECT * FROM memories WHERE id = ?', (cur.lastrowid,)).fetchone()
+        return memory_public(row)
+
+
+def memory_search(query, limit=8):
+    q = str(query or '').strip()
+    limit = max(1, min(50, int(limit)))
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        prune_memory(conn)
+        if q:
+            rows = conn.execute(
+                'SELECT * FROM memories WHERE text LIKE ? ORDER BY created_at DESC LIMIT ?',
+                (f'%{q}%', limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                'SELECT * FROM memories ORDER BY created_at DESC LIMIT ?', (limit,)
+            ).fetchall()
+        conn.commit()
+        return [memory_public(r) for r in rows]
+
+
+def memory_clear():
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute('DELETE FROM memories')
+        conn.commit()
 
 
 def voice_file(voice):
@@ -218,6 +310,36 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return json.loads(body.decode('utf-8'))
 
     def do_POST(self):
+        if self.path.startswith('/memory/search'):
+            try:
+                payload = self.read_json()
+                self.send_json({'ok': True, 'memories': memory_search(payload.get('query', ''), payload.get('limit', 8))})
+            except Exception as e:
+                self.send_json({'ok': False, 'error': str(e)}, 400)
+            return
+
+        if self.path.startswith('/memory/clear'):
+            try:
+                memory_clear()
+                self.send_json({'ok': True, 'memories': []})
+            except Exception as e:
+                self.send_json({'ok': False, 'error': str(e)}, 400)
+            return
+
+        if self.path.startswith('/memory'):
+            try:
+                payload = self.read_json()
+                item = memory_add(
+                    payload.get('text', ''),
+                    payload.get('source', 'user'),
+                    payload.get('tags', ''),
+                    payload.get('ttl_days', 30),
+                )
+                self.send_json({'ok': True, 'memory': item})
+            except Exception as e:
+                self.send_json({'ok': False, 'error': str(e)}, 400)
+            return
+
         if self.path.startswith('/voice/select'):
             try:
                 payload = self.read_json()
@@ -321,6 +443,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_error(404)
 
     def do_GET(self):
+        if self.path.startswith('/memory'):
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            limit = (q.get('limit') or ['20'])[0]
+            self.send_json({'ok': True, 'memories': memory_list(limit)})
+            return
         if self.path.startswith('/voice'):
             voices = [
                 voice_public(v)
@@ -352,7 +479,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 if __name__ == '__main__':
     load_index()
+    init_memory()
     print(f'[tts] engine={TTS_ENGINE} api={TTS_API}', flush=True)
+    print(f'[memory] {DB_PATH}', flush=True)
     print(f'[tts] voice={voice_public(current_voice())}', flush=True)
     print(f'[tts] cache={CACHE_DIR}', flush=True)
     http.server.ThreadingHTTPServer(('127.0.0.1', 8017), Handler).serve_forever()

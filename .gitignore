@@ -18,3 +18,7 @@ voice/*.txt
 .gsv/
 .venv/
 node_modules/
+
+# Local memory database
+memory.db
+memory.db-*

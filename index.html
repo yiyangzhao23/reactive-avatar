@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#0f1220" />
+<link rel="manifest" href="./manifest.webmanifest" />
+<link rel="apple-touch-icon" href="./icon-192.png" />
 <title>Reactive Avatar 原型</title>
 <link rel="stylesheet" href="./styles.css" />
 <script type="importmap">
@@ -93,6 +96,7 @@
     <div id="log"></div>
     <form id="chatForm" class="chat">
       <input id="chatInput" type="text" autocomplete="off" />
+      <button id="handsFreeBtn" type="button" class="mini" data-i18n="handsFreeStart"></button>
       <button id="micBtn" type="button" class="mini" data-i18n="micStart"></button>
       <button id="chatSend" type="submit" class="mini" data-i18n="send"></button>
     </form>
