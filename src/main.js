@@ -92,6 +92,13 @@ const I18N = {
     sttFail: '语音识别失败: ',
     micFail: '麦克风开启失败: ',
     greeting: '嗨，我是你的虚拟伙伴！开启摄像头和屏幕共享，我就能实时回应你。',
+    browserHint: '浏览器指令：打开 example.com / 搜索 北京天气 / 点击 登录 / 总结这个网页 / 截图',
+    browserDoing: '浏览器执行中：',
+    browserDone: '已完成：',
+    browserFail: '浏览器操作失败：',
+    browserConfirmClick: '要点击这个元素吗？',
+    browserReadDone: '网页内容已读到，看右侧日志。',
+    browserScreenshot: '截图已保存：',
     handsFreeStart: '连续语音',
     handsFreeStop: '停止连续语音',
     handsFreeOn: '连续语音已开启，直接说话即可。',
@@ -156,6 +163,13 @@ const I18N = {
     sttFail: 'Transcription failed: ',
     micFail: 'Microphone failed: ',
     greeting: "Hi, I'm your virtual companion! Turn on the camera and share your screen, and I'll react in real time.",
+    browserHint: 'Browser commands: open example.com / search Beijing weather / click Sign in / summarize this page / screenshot',
+    browserDoing: 'Browser action: ',
+    browserDone: 'Done: ',
+    browserFail: 'Browser action failed: ',
+    browserConfirmClick: 'Click this element? ',
+    browserReadDone: 'Page text loaded; see the log.',
+    browserScreenshot: 'Screenshot saved: ',
     handsFreeStart: 'Hands-free',
     handsFreeStop: 'Stop hands-free',
     handsFreeOn: 'Hands-free on. Just speak.',
@@ -973,11 +987,75 @@ const handsFreeBtn = $('handsFreeBtn');
 let voiceRec = false;
 let handsFreeOn = false;
 
+function parseBrowserCommand(text) {
+  const raw = String(text || '').trim();
+  if (!raw) return null;
+  let m = raw.match(/^(?:请|帮我)?(?:打开|open)\s+(.+)$/i);
+  if (m) {
+    const target = m[1].trim();
+    if (/浏览器|browser/i.test(target)) return { action: 'open_url', args: { url: 'https://www.bing.com' }, label: target };
+    if (/^https?:\/\//i.test(target) || /^[\w.-]+\.[a-z]{2,}(\/.*)?$/i.test(target)) {
+      return { action: 'open_url', args: { url: target }, label: target };
+    }
+    return null;
+  }
+  m = raw.match(/^(?:请|帮我)?(?:搜索|搜一下|查一下|查一查|search)\s*(.+)$/i);
+  if (m && m[1].trim()) return { action: 'search', args: { query: m[1].trim() }, label: m[1].trim() };
+  m = raw.match(/^(?:请|帮我)?点击\s*(.+)$/i) || raw.match(/^click\s+(.+)$/i);
+  if (m && m[1].trim()) return { action: 'click_text', args: { text: m[1].trim() }, label: m[1].trim() };
+  if (/^(?:请|帮我)?(?:总结|读一下|看看)(?:这个)?(?:网页|页面|屏幕)?$/i.test(raw) || /summarize (this )?page/i.test(raw)) {
+    return { action: 'read_page', args: {}, label: 'page' };
+  }
+  if (/^(?:请|帮我)?截图$/i.test(raw) || /^screenshot$/i.test(raw)) return { action: 'screenshot', args: {}, label: 'screen' };
+  if (/^(?:请|帮我)?(?:向下滚|往下滚|滚动)$/i.test(raw) || /^scroll/i.test(raw)) return { action: 'scroll', args: { delta: 800 }, label: 'down' };
+  if (/^(?:后退|返回)$/i.test(raw) || /^back$/i.test(raw)) return { action: 'back', args: {}, label: 'back' };
+  if (/^(?:关闭浏览器)$/i.test(raw) || /^close browser$/i.test(raw)) return { action: 'close', args: {}, label: 'close' };
+  return null;
+}
+
+async function runBrowserCommand(cmd) {
+  if (cmd.action === 'click_text' && !window.confirm(t('browserConfirmClick') + cmd.args.text)) return;
+  log(t('browserDoing') + cmd.action + (cmd.label ? ' · ' + cmd.label : ''));
+  try {
+    const res = await fetch('/computer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: cmd.action, args: cmd.args }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    const r = data.result || {};
+    if (cmd.action === 'read_page') {
+      log((r.title || '') + ' · ' + (r.url || ''));
+      let summary = String(r.text || '').slice(0, 2000);
+      try { summary = await brain.summarizePage(r.text || ''); } catch {}
+      log(summary);
+      react('relaxed', String(summary).slice(0, 120), 'none');
+      return;
+    }
+    if (cmd.action === 'screenshot') {
+      log(t('browserScreenshot') + (r.path || ''));
+      react('happy', t('browserDone') + (r.title || ''), 'nod');
+      return;
+    }
+    log(t('browserDone') + (r.title || '') + ' · ' + (r.url || ''));
+    react('happy', t('browserDone') + (r.title || ''), 'nod');
+  } catch (e) {
+    log(t('browserFail') + e.message);
+  }
+}
+
 async function sendUserText(text) {
   const line = String(text || '').trim();
   if (!line) return;
   log(line, null, true);
   avatar?.setEmotion('relaxed');
+
+  const browser = parseBrowserCommand(line);
+  if (browser) {
+    await runBrowserCommand(browser);
+    return;
+  }
 
   const remember = line.match(/^(?:请|帮我)?记住[：:，,\s]*(.+)$/s) || line.match(/^remember[:\s]+(.+)$/is);
   if (remember) {

@@ -22,3 +22,9 @@ node_modules/
 # Local memory database
 memory.db
 memory.db-*
+
+# Browser automation runtime data
+artifacts/
+
+# Browser automation runtime data
+browser_log.jsonl

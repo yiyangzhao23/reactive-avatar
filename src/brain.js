@@ -305,6 +305,27 @@ export class Brain {
     }
   }
 
+  async summarizePage(text) {
+    const src = String(text || '').slice(0, 12000);
+    if (!src.trim()) return '';
+    if (!this.getKey()) return src.slice(0, 800);
+    const system = this.getLang() === 'zh'
+      ? '你是网页摘要助手。只输出一段 120 字以内的中文摘要，说明页面主题和关键信息；不要客套，不要编造页面没有的内容。'
+      : 'You summarize web pages. Output one English paragraph under 100 words with the page topic and key facts; do not add facts not present.';
+    try {
+      const raw = await this.call(system, [{ text: src }]);
+      try {
+        const out = JSON.parse(raw);
+        return out.summary || out.line || raw.trim();
+      } catch {
+        return raw.trim();
+      }
+    } catch (e) {
+      console.warn('page summary failed', e);
+      return src.slice(0, 800);
+    }
+  }
+
   // 无 API Key 时的本地反应
   askVision() {
     const S = this.s;

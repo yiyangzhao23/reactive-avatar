@@ -1,5 +1,8 @@
 import array
 import base64
+import concurrent.futures
+import queue
+import threading
 import hashlib
 import http.server
 import io
@@ -23,6 +26,14 @@ VOICES_DIR = os.path.join(VOICE_DIR, 'voices')
 CACHE_DIR = os.path.join(VOICE_DIR, 'cache')
 INDEX_PATH = os.path.join(VOICES_DIR, 'index.json')
 DB_PATH = os.path.join(ROOT, 'memory.db')
+BROWSER_LOG = os.path.join(ROOT, 'browser_log.jsonl')
+BROWSER_ARTIFACTS = os.path.join(ROOT, 'artifacts', 'browser')
+os.makedirs(BROWSER_ARTIFACTS, exist_ok=True)
+BROWSER_HEADLESS = os.environ.get('BROWSER_HEADLESS', '0') not in ('0', 'false', 'no', 'False')
+BROWSER_STATE = {'ready': False, 'url': '', 'title': '', 'error': ''}
+BROWSER_WORKER = None
+BROWSER_LOCK = threading.Lock()
+BROWSER_ALLOWED = {'open_url', 'search', 'click_text', 'read_page', 'screenshot', 'scroll', 'back', 'forward', 'reload', 'status', 'close'}
 os.makedirs(VOICES_DIR, exist_ok=True)
 os.makedirs(CACHE_DIR, exist_ok=True)
 
@@ -287,6 +298,137 @@ def synth(text: str, lang: str) -> bytes:
     return synth_say(text, lang)
 
 
+class BrowserWorker:
+    def __init__(self):
+        self.q = queue.Queue()
+        self.thread = threading.Thread(target=self._run, daemon=True)
+        self.thread.start()
+
+    def _run(self):
+        try:
+            from playwright.sync_api import sync_playwright
+            self.pw = sync_playwright().start()
+            self.browser = self.pw.chromium.launch(
+                channel='chrome',
+                headless=BROWSER_HEADLESS,
+                args=['--no-sandbox', '--disable-dev-shm-usage'],
+            )
+            self.context = self.browser.new_context(viewport={'width': 1280, 'height': 900})
+            self.page = self.context.new_page()
+            self.page.set_default_timeout(15000)
+            BROWSER_STATE['ready'] = True
+            BROWSER_STATE['error'] = ''
+        except Exception as e:
+            BROWSER_STATE['error'] = str(e)
+            print(f'[browser] init failed: {e}', flush=True)
+            return
+        while True:
+            item = self.q.get()
+            if item is None:
+                break
+            action, args, fut = item
+            try:
+                fut.set_result(self._do(action, args))
+            except Exception as e:
+                fut.set_exception(e)
+
+    def _do(self, action, args):
+        page = self.page
+        if action == 'status':
+            return dict(BROWSER_STATE)
+        if action == 'remember':
+            return {}
+        if action == 'open_url':
+            url = str(args.get('url', '')).strip()
+            if not url:
+                raise ValueError('url is required')
+            if not re.match(r'^[a-z]+://', url, re.I):
+                url = 'https://' + url
+            page.goto(url, wait_until='domcontentloaded', timeout=30000)
+            BROWSER_STATE.update(url=page.url, title=page.title())
+            return {'url': page.url, 'title': page.title()}
+        if action == 'search':
+            q = str(args.get('query', '')).strip()
+            if not q:
+                raise ValueError('query is required')
+            url = 'https://www.bing.com/search?q=' + urllib.parse.quote(q)
+            page.goto(url, wait_until='domcontentloaded', timeout=30000)
+            BROWSER_STATE.update(url=page.url, title=page.title())
+            return {'url': page.url, 'title': page.title(), 'query': q}
+        if action == 'click_text':
+            text = str(args.get('text', '')).strip()
+            if not text:
+                raise ValueError('text is required')
+            page.get_by_text(text, exact=False).first.click(timeout=10000)
+            page.wait_for_timeout(800)
+            BROWSER_STATE.update(url=page.url, title=page.title())
+            return {'url': page.url, 'title': page.title(), 'clicked': text}
+        if action == 'read_page':
+            text = page.inner_text('body')
+            text = re.sub(r'\n{3,}', '\n\n', text).strip()
+            BROWSER_STATE.update(url=page.url, title=page.title())
+            return {'url': page.url, 'title': page.title(), 'text': text[:12000], 'truncated': len(text) > 12000}
+        if action == 'screenshot':
+            name = f"shot-{int(__import__('time').time())}.png"
+            path = os.path.join(BROWSER_ARTIFACTS, name)
+            page.screenshot(path=path, full_page=False)
+            return {'path': path, 'url': page.url, 'title': page.title()}
+        if action == 'scroll':
+            delta = int(args.get('delta', 800))
+            page.mouse.wheel(0, delta)
+            page.wait_for_timeout(300)
+            return {'delta': delta, 'url': page.url}
+        if action == 'back':
+            page.go_back(wait_until='domcontentloaded', timeout=30000)
+            BROWSER_STATE.update(url=page.url, title=page.title())
+            return {'url': page.url, 'title': page.title()}
+        if action == 'forward':
+            page.go_forward(wait_until='domcontentloaded', timeout=30000)
+            BROWSER_STATE.update(url=page.url, title=page.title())
+            return {'url': page.url, 'title': page.title()}
+        if action == 'reload':
+            page.reload(wait_until='domcontentloaded', timeout=30000)
+            return {'url': page.url, 'title': page.title()}
+        if action == 'close':
+            global BROWSER_WORKER
+            try:
+                self.browser.close()
+            finally:
+                BROWSER_STATE['ready'] = False
+                BROWSER_WORKER = None
+            return {'closed': True}
+        raise ValueError(f'unsupported browser action: {action}')
+
+    def run(self, action, args=None):
+        if not self.thread.is_alive():
+            raise RuntimeError('browser worker is not running')
+        fut = concurrent.futures.Future()
+        self.q.put((action, args or {}, fut))
+        return fut.result(timeout=120)
+
+
+def get_browser():
+    global BROWSER_WORKER
+    with BROWSER_LOCK:
+        if BROWSER_WORKER is None:
+            BROWSER_WORKER = BrowserWorker()
+        return BROWSER_WORKER
+
+
+def browser_log(action, args, result=None, error=None):
+    try:
+        with open(BROWSER_LOG, 'a', encoding='utf-8') as f:
+            f.write(json.dumps({
+                'ts': now_iso(),
+                'action': action,
+                'args': args or {},
+                'result': result if isinstance(result, (str, int, float, bool, type(None))) else 'ok',
+                'error': str(error) if error else None,
+            }, ensure_ascii=False) + '\n')
+    except Exception:
+        pass
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
@@ -310,6 +452,21 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return json.loads(body.decode('utf-8'))
 
     def do_POST(self):
+        if self.path.startswith('/computer'):
+            try:
+                payload = self.read_json()
+                action = str(payload.get('action', '')).strip()
+                args = payload.get('args') or {}
+                if action not in BROWSER_ALLOWED:
+                    raise ValueError(f'action not allowed: {action}')
+                result = get_browser().run(action, args)
+                browser_log(action, args, result=result)
+                self.send_json({'ok': True, 'action': action, 'result': result, 'state': BROWSER_STATE})
+            except Exception as e:
+                browser_log('error', {}, error=e)
+                self.send_json({'ok': False, 'error': str(e), 'state': BROWSER_STATE}, 400)
+            return
+
         if self.path.startswith('/memory/search'):
             try:
                 payload = self.read_json()
@@ -443,6 +600,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_error(404)
 
     def do_GET(self):
+        if self.path.startswith('/computer'):
+            self.send_json({'ok': True, 'state': BROWSER_STATE})
+            return
         if self.path.startswith('/memory'):
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             limit = (q.get('limit') or ['20'])[0]

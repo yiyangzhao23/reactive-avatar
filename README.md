@@ -23,6 +23,8 @@ the page and proxies model/TTS requests.
 - SQLite memory with source, expiry, keyword search, and "remember this"
 - Tool intents: "summarize my screen" and "remember this"
 - Perception ledger: shows what the model actually receives, with a pause switch
+- Browser automation: open URLs, search, read/summarize pages, click by text,
+  scroll, screenshot, and close the browser (with confirmation for clicks)
 - PWA: installable from the browser; service worker caches the shell
 
 ## Quick start
@@ -34,6 +36,13 @@ python3 server.py
 
 No Python packages are required for the basic page. API keys are entered in the
 page and stored in the browser's `localStorage`; they are never committed.
+
+For browser automation, install the optional dependency (it uses your installed
+Google Chrome):
+
+```sh
+python3 -m pip install -r requirements.txt
+```
 
 ### Add an avatar model
 
@@ -89,9 +98,34 @@ camera / screen
 | `src/perception.js` | webcam, screen share, MediaPipe |
 | `src/brain.js` | model calls, prompts, memory, autonomous gesture inference |
 | `src/voice.js` | microphone recording, transcription, hands-free recognition |
-| `server.py` | static server, `/llm`, `/tts`, `/voice`, `/memory` |
+| `server.py` | static server, `/llm`, `/tts`, `/voice`, `/memory`, `/computer` |
 | `manifest.webmanifest`, `sw.js` | PWA install + shell cache |
 | `voice/` | optional GPT-SoVITS setup |
+
+## Browser automation
+
+The chat accepts natural-language browser commands:
+
+```text
+打开 example.com
+搜索 北京天气
+点击 登录
+总结这个网页
+截图
+向下滚
+返回
+关闭浏览器
+```
+
+The server runs Playwright against your installed Chrome through a background
+worker and only allows a fixed action list (`open_url`, `search`, `click_text`,
+`read_page`, `screenshot`, `scroll`, `back`, `forward`, `reload`, `status`,
+`close`). Clicks ask for confirmation in the page. Actions are logged to
+`browser_log.jsonl` (git-ignored), and screenshots go to `artifacts/browser/`.
+
+Browser automation can still be risky: page text is untrusted, and a click can
+submit a form or change an account. Keep the browser window visible, use the
+confirmation prompt, and close the browser when finished.
 
 ## Gestures
 
@@ -130,4 +164,5 @@ requests always go to the local server.
 - `model.vrm` (add your own, with a compatible license)
 - voice recordings, reference audio, test audio
 - `.gsv/` (local GPT-SoVITS install and models)
-- `memory.db` and API keys (local runtime data)
+- `memory.db`, `browser_log.jsonl`, `artifacts/browser/` and API keys
+  (local runtime data)

@@ -1,0 +1,2 @@
+# Optional: browser automation (uses the installed Google Chrome channel)
+playwright>=1.50
