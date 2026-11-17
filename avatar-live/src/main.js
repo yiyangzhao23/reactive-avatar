@@ -4,6 +4,8 @@ import { startCamera, startScreenShare, startFaceTracking, stopCamera, stopScree
 import { Brain } from './brain.js?v=11';
 import { startRecording, stopRecording, transcribe, startHandsFree, stopHandsFree } from './voice.js?v=11';
 
+const IS_DEV = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+
 const canvas = document.getElementById('scene');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
@@ -896,8 +898,10 @@ async function speak(text) {
         continue;
       } catch (e) {
         console.warn('Gemini 语音失败，回退服务器语音', e);
+        if (!IS_DEV) { speakBrowser(text); return; }
       }
     }
+    if (!IS_DEV) { speakBrowser(text); return; }
     try {
       await speakServerPart(part, seq);
       if (!voiceLogged) {
@@ -1160,8 +1164,9 @@ chatForm.onsubmit = async (e) => {
   await sendUserText(text);
 };
 
+if (!IS_DEV) document.getElementById('voiceBox')?.remove();
 applyLang();
-loadVoices();
+if (IS_DEV) loadVoices();
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch((e) => console.warn('service worker failed', e));
