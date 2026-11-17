@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Reactive Avatar · 架构与流程示意</title>
+<style>
+  :root {
+    --bg: #0b0e1a;
+    --panel: #131830;
+    --panel2: #0f1426;
+    --line: #2a3252;
+    --ink: #e8eaf2;
+    --muted: #8b93b5;
+    --accent: #5a63ff;
+    --accent2: #35d0a5;
+    --warn: #f0b35b;
+    --danger: #e5484d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: radial-gradient(1200px 700px at 20% -10%, #1a2144 0%, var(--bg) 55%);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    padding: 40px 44px 60px;
+  }
+  header { max-width: 1280px; margin: 0 auto 28px; }
+  h1 { font-size: 30px; margin: 0 0 8px; letter-spacing: .5px; }
+  h1 span { color: var(--accent); }
+  .sub { color: var(--muted); font-size: 13px; line-height: 1.7; }
+  .meta { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .pill {
+    font-size: 11px; color: #c7ccee; border: 1px solid var(--line);
+    background: var(--panel2); border-radius: 999px; padding: 4px 10px;
+  }
+  .pill.ok { color: var(--accent2); border-color: rgba(53,208,165,.35); }
+  .pill.warn { color: var(--warn); border-color: rgba(240,179,91,.35); }
+
+  section { max-width: 1280px; margin: 0 auto 34px; }
+  h2 { font-size: 17px; margin: 0 0 12px; color: #cdd3ff; font-weight: 600; }
+  .card {
+    background: linear-gradient(180deg, rgba(24,30,56,.85), rgba(15,20,38,.9));
+    border: 1px solid var(--line); border-radius: 16px; padding: 18px;
+    box-shadow: 0 18px 50px rgba(0,0,0,.28);
+  }
+  .diagram { width: 100%; height: auto; display: block; }
+
+  .flow { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; align-items: stretch; }
+  .step {
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 12px;
+    padding: 12px; position: relative;
+  }
+  .step .n {
+    font-size: 11px; color: var(--accent); font-weight: 700; letter-spacing: .08em;
+  }
+  .step h3 { margin: 6px 0 6px; font-size: 13px; }
+  .step p { margin: 0; font-size: 11px; color: var(--muted); line-height: 1.55; }
+  .step::after {
+    content: ""; position: absolute; right: -10px; top: 50%;
+    width: 10px; height: 2px; background: var(--line);
+  }
+  .step:last-child::after { display: none; }
+
+  .branches { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 14px; }
+  .branch {
+    border: 1px dashed var(--line); border-radius: 12px; padding: 12px;
+    background: rgba(15,20,38,.5);
+  }
+  .branch h4 { margin: 0 0 6px; font-size: 12px; color: #d9ddf5; }
+  .branch p { margin: 0; font-size: 11px; color: var(--muted); line-height: 1.55; }
+
+  .deploy { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .tier {
+    border: 1px solid var(--line); border-radius: 12px; padding: 14px; background: var(--panel2);
+  }
+  .tier h4 { margin: 0 0 8px; font-size: 12px; color: #dfe3fb; }
+  .tier ul { margin: 0; padding-left: 16px; color: var(--muted); font-size: 11px; line-height: 1.7; }
+  .tier.dash { border-style: dashed; }
+  .tier.dash h4 { color: var(--warn); }
+
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 12px; color: var(--muted); font-size: 11px; }
+  .legend b { color: var(--ink); font-weight: 600; }
+  .key { display: inline-block; width: 22px; height: 0; border-top: 2px solid var(--line); vertical-align: middle; margin-right: 6px; }
+  .key.solid { border-color: var(--accent); }
+  .key.dashed { border-style: dashed; border-color: var(--warn); }
+
+  .ng { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .ng div {
+    border-left: 3px solid var(--danger); background: rgba(229,72,77,.06);
+    padding: 10px 12px; border-radius: 8px; font-size: 12px; color: #e6c9cb;
+  }
+  footer { max-width: 1280px; margin: 0 auto; color: var(--muted); font-size: 11px; }
+
+  text { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Reactive Avatar · <span>架构与流程示意</span></h1>
+  <p class="sub">桌面优先的 3D 虚拟角色：摄像头 + 屏幕共享感知，BYOK 调用 Gemini / OpenCode 网关，本地记忆与系统语音。<br>
+  依据 <b>docs/plan.md</b>（P0–P4）绘制，非最终实现承诺。</p>
+  <div class="meta">
+    <span class="pill">公开 Beta</span>
+    <span class="pill">桌面 Web</span>
+    <span class="pill">香港 + 海外</span>
+    <span class="pill ok">BYOK · Key 仅本地</span>
+    <span class="pill warn">v1 不做 GPU TTS</span>
+  </div>
+</header>
+
+<section>
+  <h2>1 · 系统架构</h2>
+  <div class="card">
+    <svg class="diagram" viewBox="0 0 1240 700" role="img" aria-label="系统架构图">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#5a63ff"/>
+        </marker>
+        <marker id="arrowMuted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#5a7bff"/>
+        </marker>
+        <marker id="arrowWarn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#f0b35b"/>
+        </marker>
+      </defs>
+
+      <!-- Browser panel -->
+      <rect x="24" y="24" width="436" height="652" rx="16" fill="#10152a" stroke="#2a3252"/>
+      <text x="44" y="56" fill="#cdd3ff" font-size="15" font-weight="600">浏览器（BYOK）</text>
+      <text x="44" y="76" fill="#8b93b5" font-size="11">静态站 · 无构建 · PWA</text>
+
+      <g font-size="12" fill="#e8eaf2">
+        <rect x="44" y="94" width="396" height="56" rx="10" fill="#131a33" stroke="#2f3a63"/>
+        <text x="60" y="118" font-weight="600">3D 角色</text>
+        <text x="60" y="136" fill="#8b93b5" font-size="11">VRM · three-vrm · 表情 / 口型 / 待机动作</text>
+
+        <rect x="44" y="162" width="396" height="56" rx="10" fill="#131a33" stroke="#2f3a63"/>
+        <text x="60" y="186" font-weight="600">感知层</text>
+        <text x="60" y="204" fill="#8b93b5" font-size="11">摄像头 · 屏幕共享 · MediaPipe 人脸/表情</text>
+
+        <rect x="44" y="230" width="396" height="56" rx="10" fill="#131a33" stroke="#2f3a63"/>
+        <text x="60" y="254" font-weight="600">交互与状态</text>
+        <text x="60" y="272" fill="#8b93b5" font-size="11">鼠标视线 · 拖动转身 · 情绪 / 台词 / 日志</text>
+
+        <rect x="44" y="298" width="396" height="56" rx="10" fill="#131a33" stroke="#2f3a63"/>
+        <text x="60" y="322" font-weight="600">对话</text>
+        <text x="60" y="340" fill="#8b93b5" font-size="11">打字 · 语音（录音 → 转写）· 屏幕分析 · 剧情记忆</text>
+
+        <rect x="44" y="366" width="190" height="56" rx="10" fill="#15231f" stroke="#2f6b55"/>
+        <text x="60" y="390" font-weight="600" fill="#35d0a5">Key 存储</text>
+        <text x="60" y="408" fill="#8b93b5" font-size="11">localStorage · 仅本地</text>
+
+        <rect x="250" y="366" width="190" height="56" rx="10" fill="#131a33" stroke="#2f3a63"/>
+        <text x="266" y="390" font-weight="600">剧情记忆</text>
+        <text x="266" y="408" fill="#8b93b5" font-size="11">localStorage · 不同步</text>
+
+        <rect x="44" y="434" width="396" height="56" rx="10" fill="#131a33" stroke="#2f3a63"/>
+        <text x="60" y="458" font-weight="600">PWA</text>
+        <text x="60" y="476" fill="#8b93b5" font-size="11">manifest · service worker · 版本化缓存</text>
+
+        <rect x="44" y="502" width="396" height="56" rx="10" fill="#131a33" stroke="#2f3a63"/>
+        <text x="60" y="526" font-weight="600">TTS</text>
+        <text x="60" y="544" fill="#8b93b5" font-size="11">系统音色（v1）· 本地 say/TTS 仅开发模式</text>
+
+        <rect x="44" y="584" width="396" height="56" rx="10" fill="#171b30" stroke="#3b4570" stroke-dasharray="5 4"/>
+        <text x="60" y="608" font-weight="600" fill="#c7ccee">Turnstile 首次验证</text>
+        <text x="60" y="626" fill="#8b93b5" font-size="11">token → /api/session → HttpOnly cookie</text>
+      </g>
+
+      <!-- Backend -->
+      <rect x="520" y="170" width="330" height="366" rx="16" fill="#10152a" stroke="#2a3252"/>
+      <text x="540" y="202" fill="#cdd3ff" font-size="15" font-weight="600">轻后端</text>
+      <text x="540" y="222" fill="#8b93b5" font-size="11">零 Key 存储 · 限流 · 白名单</text>
+
+      <g font-size="12" fill="#e8eaf2">
+        <rect x="540" y="240" width="290" height="60" rx="10" fill="#131a33" stroke="#2f3a63"/>
+        <text x="556" y="264" font-weight="600">/api/session</text>
+        <text x="556" y="282" fill="#8b93b5" font-size="11">Turnstile siteverify → 短期签名 cookie</text>
+
+        <rect x="540" y="316" width="290" height="76" rx="10" fill="#131a33" stroke="#2f3a63"/>
+        <text x="556" y="340" font-weight="600">/api/llm</text>
+        <text x="556" y="358" fill="#8b93b5" font-size="11">透传 Bearer · 不记日志 · 每 IP 限流</text>
+        <text x="556" y="376" fill="#8b93b5" font-size="11">上游：opencode.ai/inference</text>
+
+        <rect x="540" y="408" width="290" height="76" rx="10" fill="#131a33" stroke="#2f3a63"/>
+        <text x="556" y="432" font-weight="600">/api/stt</text>
+        <text x="556" y="450" fill="#8b93b5" font-size="11">网关音频转写（香港使用）</text>
+        <text x="556" y="468" fill="#8b93b5" font-size="11">音频不落盘</text>
+
+        <rect x="540" y="500" width="290" height="22" rx="8" fill="#141a2e" stroke="#2a3252" stroke-dasharray="4 4"/>
+        <text x="556" y="515" fill="#8b93b5" font-size="11">静态托管 / 健康检查（同域）</text>
+      </g>
+
+      <!-- Providers -->
+      <rect x="900" y="90" width="310" height="110" rx="14" fill="#131a33" stroke="#2f3a63"/>
+      <text x="918" y="118" font-size="13" font-weight="600" fill="#e8eaf2">Gemini API</text>
+      <text x="918" y="138" font-size="11" fill="#8b93b5">海外用户 · 浏览器直连</text>
+      <text x="918" y="158" font-size="11" fill="#8b93b5">对话 / 看图 / 语音</text>
+      <text x="918" y="178" font-size="11" fill="#f0b35b">香港不适用（区域限制）</text>
+
+      <rect x="900" y="228" width="310" height="110" rx="14" fill="#131a33" stroke="#2f3a63"/>
+      <text x="918" y="256" font-size="13" font-weight="600" fill="#e8eaf2">OpenCode 网关</text>
+      <text x="918" y="276" font-size="11" fill="#8b93b5">香港 / 不可直连</text>
+      <text x="918" y="296" font-size="11" fill="#8b93b5">OpenAI 兼容 · 视/听模型</text>
+      <text x="918" y="316" font-size="11" fill="#8b93b5">经后端代理（绕 CORS）</text>
+
+      <rect x="900" y="366" width="310" height="110" rx="14" fill="#131a33" stroke="#2f3a63"/>
+      <text x="918" y="394" font-size="13" font-weight="600" fill="#e8eaf2">Cloudflare Turnstile</text>
+      <text x="918" y="414" font-size="11" fill="#8b93b5">siteverify · 反滥用</text>
+      <text x="918" y="434" font-size="11" fill="#8b93b5">token 一次性 · 5 分钟</text>
+      <text x="918" y="454" font-size="11" fill="#8b93b5">secret 仅后端环境变量</text>
+
+      <rect x="900" y="504" width="310" height="86" rx="14" fill="#1a1710" stroke="#6b5730" stroke-dasharray="6 4"/>
+      <text x="918" y="532" font-size="13" font-weight="600" fill="#f0b35b">GPU TTS（v2 · 不做）</text>
+      <text x="918" y="552" font-size="11" fill="#a99b7a">站主克隆音色 · 需 GPU 推理</text>
+      <text x="918" y="572" font-size="11" fill="#a99b7a">公网托管成本高，v1 关闭</text>
+
+      <!-- Arrows -->
+      <path d="M436 300 C 480 300, 490 300, 520 300" fill="none" stroke="#5a63ff" stroke-width="2" marker-end="url(#arrow)"/>
+      <text x="452" y="290" fill="#9aa1c0" font-size="10">香港 / 不可直连</text>
+
+      <path d="M436 132 C 640 40, 760 100, 900 128" fill="none" stroke="#5a63ff" stroke-width="2" marker-end="url(#arrowMuted)"/>
+      <text x="640" y="76" fill="#9aa1c0" font-size="10">海外：直连 Gemini</text>
+
+      <path d="M830 384 C 860 384, 870 300, 900 290" fill="none" stroke="#5a63ff" stroke-width="2" marker-end="url(#arrow)"/>
+      <text x="836" y="340" fill="#9aa1c0" font-size="10">/api/llm · /api/stt</text>
+
+      <path d="M830 460 C 862 430, 872 420, 900 418" fill="none" stroke="#5a63ff" stroke-width="2" marker-end="url(#arrow)"/>
+      <text x="836" y="462" fill="#9aa1c0" font-size="10">siteverify</text>
+
+      <path d="M436 612 C 700 660, 840 700, 900 570" fill="none" stroke="#f0b35b" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arrowWarn)"/>
+      <text x="700" y="664" fill="#a99b7a" font-size="10">v2：可选自托管音色</text>
+    </svg>
+
+    <div class="legend">
+      <span><span class="key solid"></span><b>实线</b>：当前原型已具备 / v1 计划</span>
+      <span><span class="key dashed"></span><b>虚线</b>：暂不实现（v2 或 Non-goal）</span>
+      <span><b>BYOK</b>：Key 只存在浏览器，不经服务器落库</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>2 · 对话与状态流程</h2>
+  <div class="card">
+    <div class="flow">
+      <div class="step"><div class="n">01</div><h3>输入</h3><p>打字 / 麦克风 / 鼠标 / 摄像头 / 屏幕共享</p></div>
+      <div class="step"><div class="n">02</div><h3>本地感知</h3><p>MediaPipe 人脸与表情，屏幕亮度与变化，生成观察文本</p></div>
+      <div class="step"><div class="n">03</div><h3>上下文</h3><p>最近对话 + 剧情记忆 + 当前观察（截图仅在需要时携带）</p></div>
+      <div class="step"><div class="n">04</div><h3>路由</h3><p>海外直连 Gemini；香港走 OpenCode 网关；失败回退本地规则</p></div>
+      <div class="step"><div class="n">05</div><h3>反应</h3><p>情绪标签 + 一句台词（JSON 约束，失败原文兜底）</p></div>
+      <div class="step"><div class="n">06</div><h3>表达</h3><p>表情 / 口型 / 手势 / TTS + 聊天记录与记忆写入</p></div>
+    </div>
+
+    <div class="branches">
+      <div class="branch">
+        <h4>语音聊天</h4>
+        <p>录音（WAV）→ 转写（Gemini 或网关音频）→ 作为用户消息 → 回复朗读。空白/超短音频直接丢弃。</p>
+      </div>
+      <div class="branch">
+        <h4>屏幕分析（游戏）</h4>
+        <p>截图 + 提示词 → 概况 / 线索 / 建议。开启剧情记忆时要求返回 <code>{analysis, memory}</code>，只存新事实。</p>
+      </div>
+      <div class="branch">
+        <h4>鼠标互动</h4>
+        <p>移动 → 1 秒内眼/头跟随（抬头受限、眼珠幅度受限）；拖动 → 转身 + 躯干惯性；互动期间暂停待机小动作。</p>
+      </div>
+    </div>
+
+    <div class="branches" style="grid-template-columns: repeat(4, 1fr);">
+      <div class="branch"><h4>状态：待机</h4><p>呼吸 / 轻摆 / 眨眼；开页挥手一次；随机叉腰。</p></div>
+      <div class="branch"><h4>状态：说话</h4><p>口型随语音节奏；情绪 6 秒后回落到 neutral。</p></div>
+      <div class="branch"><h4>状态：互动</h4><p>拖动 / 视线期间抑制待机动作，结束后延迟恢复。</p></div>
+      <div class="branch"><h4>状态：降级</h4><p>无 Key / 无摄像头 / 断网：提示缺什么，保留本地能力。</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>3 · 部署视图（目标形态）</h2>
+  <div class="card">
+    <div class="deploy">
+      <div class="tier">
+        <h4>静态前端</h4>
+        <ul>
+          <li>Cloudflare Pages / Vercel</li>
+          <li>HTTPS 必需（摄像头/屏幕）</li>
+          <li>CDN 缓存 + 版本化资源</li>
+          <li>PWA 离线壳</li>
+        </ul>
+      </div>
+      <div class="tier">
+        <h4>轻后端</h4>
+        <ul>
+          <li>/api/session + Turnstile</li>
+          <li>/api/llm · /api/stt</li>
+          <li>限流 / 白名单 / 超时</li>
+          <li>零 Key 存储</li>
+        </ul>
+      </div>
+      <div class="tier">
+        <h4>外部服务</h4>
+        <ul>
+          <li>Gemini API（海外）</li>
+          <li>OpenCode 网关（香港）</li>
+          <li>Cloudflare Turnstile</li>
+          <li>模型 / 音频不落盘</li>
+        </ul>
+      </div>
+      <div class="tier dash">
+        <h4>v2 可选</h4>
+        <ul>
+          <li>GPU TTS（克隆音色）</li>
+          <li>云端跨设备记忆</li>
+          <li>移动端适配</li>
+          <li>用户自传音色（需授权审核）</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>4 · 红线（Non-goals，v1）</h2>
+  <div class="ng">
+    <div>不做移动端；iOS 无屏幕共享，不宣传不适配</div>
+    <div>不做中国大陆直连可用性</div>
+    <div>不做账号 / 支付 / 订阅（BYOK）</div>
+    <div>服务器不保存 Key / 截图 / 音频 / 聊天原文</div>
+    <div>不开放用户上传自定义音色</div>
+    <div>不做多人房间 / 直播 / 原生 App</div>
+    <div>不自建 GPU TTS，不对外提供克隆音色</div>
+    <div>不做服务端跨设备剧情记忆</div>
+  </div>
+</section>
+
+<footer>
+  生成于课程展示用 · 对应版本：v39 原型 · 计划文件：docs/plan.md · 证据表：docs/evidence.md
+</footer>
+
+</body>
+</html>

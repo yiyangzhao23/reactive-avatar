@@ -1,0 +1,15 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+
+# Local runtime / heavy env (never commit)
+avatar-live/.gsv/
+avatar-live/voice/cache/
+avatar-live/memory.db
+
+# Tool artifacts / logs
+avatar-live/artifacts/
+avatar-live/browser_log.jsonl
