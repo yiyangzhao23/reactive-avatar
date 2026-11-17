@@ -71,7 +71,7 @@ curl -s -o /tmp/tts.wav -w 'tts: %{http_code} %{content_type}\n' \
 
 ```bash
 for f in avatar-live/model-parts/*.bin avatar-live/dist/model-parts/*.bin; do [ -f "$f" ] && du -h "$f"; done
-cat avatar-live/model-parts/manifest.json
+cat avatar-live/model-parts/manifest.json   # 换模型后先运行 node split-model.js
 ```
 
 期望：每个分片 <25MiB；manifest 的 `parts` 与实际分片数一致（当前 4 片，总计约 75MB）。

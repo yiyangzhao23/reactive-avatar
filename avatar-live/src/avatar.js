@@ -18,10 +18,13 @@ export async function createAvatar(scene) {
 
 async function loadVRM() {
   const manifest = await (await fetch('./model-parts/manifest.json')).json();
+  const files = Array.isArray(manifest.files) && manifest.files.length
+    ? manifest.files.map((f) => f.file)
+    : Array.from({ length: manifest.parts }, (_, i) => `part-${i}.bin`);
   const parts = [];
-  for (let i = 0; i < manifest.parts; i++) {
-    const res = await fetch(`./model-parts/part-${i}.bin`);
-    if (!res.ok) throw new Error(`model-parts 缺少 part-${i}`);
+  for (const file of files) {
+    const res = await fetch(`./model-parts/${file}`);
+    if (!res.ok) throw new Error(`model-parts 缺少 ${file}`);
     parts.push(new Uint8Array(await res.arrayBuffer()));
   }
   const total = parts.reduce((n, p) => n + p.length, 0);

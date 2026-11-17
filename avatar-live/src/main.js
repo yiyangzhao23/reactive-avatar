@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createAvatar } from './avatar.js?v=11';
+import { createAvatar } from './avatar.js?v=12';
 import { startCamera, startScreenShare, startFaceTracking, stopCamera, stopScreenShare, captureScreen, state } from './perception.js?v=11';
 import { Brain } from './brain.js?v=11';
 import { startRecording, stopRecording, transcribe, startHandsFree, stopHandsFree } from './voice.js?v=11';

@@ -2,6 +2,7 @@
 // Splits model.vrm into <25MiB parts (Cloudflare Pages per-file limit).
 const fs = require('fs');
 const path = require('path');
+const { splitModel } = require('./split-model.js');
 
 const root = __dirname;
 const dist = path.join(root, 'dist');
@@ -21,18 +22,8 @@ const files = [
 for (const f of files) fs.copyFileSync(path.join(root, f), path.join(dist, f));
 fs.cpSync(path.join(root, 'src'), path.join(dist, 'src'), { recursive: true });
 
-const modelPath = path.join(root, 'model.vrm');
-const model = fs.readFileSync(modelPath);
-const partsDir = path.join(dist, 'model-parts');
-fs.mkdirSync(partsDir);
-const count = Math.ceil(model.length / PART);
-for (let i = 0; i < count; i++) {
-  fs.writeFileSync(path.join(partsDir, `part-${i}.bin`), model.subarray(i * PART, (i + 1) * PART));
-}
-fs.writeFileSync(
-  path.join(partsDir, 'manifest.json'),
-  JSON.stringify({ parts: count, size: model.length })
-);
+const manifest = splitModel(path.join(root, 'model.vrm'), path.join(dist, 'model-parts'));
+const count = manifest.parts;
 
 fs.writeFileSync(path.join(dist, '_headers'), [
   '/*',
