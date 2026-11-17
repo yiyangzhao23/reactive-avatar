@@ -3,16 +3,32 @@
 
 # Python
 __pycache__/
-*.pyc
+*.py[cod]
+*.log
+
+# Environment
+.env
+.env.*
+.venv/
+
+# Node
+node_modules/
 
 # Local runtime / heavy env (never commit)
 avatar-live/.gsv/
 avatar-live/voice/cache/
+avatar-live/voice/voices/
 avatar-live/memory.db
-
-# Tool artifacts / logs
+avatar-live/memory.db-*
 avatar-live/artifacts/
 avatar-live/browser_log.jsonl
+
+# Large/private local assets (model already tracked in history)
+model.vrm
+voice/*.wav
+voice/*.m4a
+voice/*.mp3
+voice/*.txt
 
 # Generated model parts (build artifact)
 avatar-live/model-parts/
