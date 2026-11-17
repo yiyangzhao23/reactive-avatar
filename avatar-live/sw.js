@@ -1,4 +1,4 @@
-const CACHE = 'reactive-avatar-v2';
+const CACHE = 'reactive-avatar-v3';
 const CORE = [
   '/',
   '/index.html',
@@ -30,7 +30,8 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith('/tts') || url.pathname.startsWith('/voice') ||
-      url.pathname.startsWith('/memory') || url.pathname.startsWith('/llm')) return;
+      url.pathname.startsWith('/memory') || url.pathname.startsWith('/llm') ||
+      url.pathname.startsWith('/model-parts/')) return;
   const networkFirst = url.pathname === '/' || url.pathname.endsWith('.html') ||
     url.pathname.endsWith('.js') || url.pathname.endsWith('.css');
   if (networkFirst) {

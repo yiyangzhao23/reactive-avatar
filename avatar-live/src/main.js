@@ -912,8 +912,8 @@ async function speak(text) {
         armResume();
         return;
       }
-      console.warn('服务器 TTS 失败', e);
-      if (!isSafari) speakBrowser(text);
+      console.warn('服务器 TTS 失败，回退浏览器语音', e);
+      speakBrowser(text);
       return;
     }
   }

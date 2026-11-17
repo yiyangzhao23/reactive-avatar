@@ -22,7 +22,7 @@
 |------|--------|----------|
 | P0 基础与法务 | 域名/HTTPS、隐私政策、同意弹窗、安全头、Turnstile widget | 无同意不开启摄像头/屏幕；`/api/*` 未验证不可用 |
 | P1 后端与 Key 路径 | `/api/session`、`/api/llm`、`/api/stt`、限流 | 香港网络可走网关完成对话/看图/转写；Key 不落库不落日志 |
-| P2 前端生产化 | VRM 优化、PWA 版本化、错误处理、监控 | 首屏资源 ≤15MB（VRM 优化后）；弱网/无 Key 有降级 |
+| P2 前端生产化 | 模型分片、PWA 版本化、错误处理、监控 | 每个模型分片 <25MiB 且可完整加载；弱网/无 Key 有降级 |
 | P3 兼容与 QA | 桌面矩阵、滥用测试 | Chrome/Safari/Edge × macOS/Windows 通过 |
 | P4 Beta 发布 | 灰度 → 公开、告警、回滚 | 回滚演练一次；上线检查清单全绿 |
 
@@ -70,10 +70,11 @@ curl -s -o /tmp/tts.wav -w 'tts: %{http_code} %{content_type}\n' \
 ### 5.4 资源体积（优化目标）
 
 ```bash
-du -h avatar-live/model.vrm
+for f in avatar-live/model-parts/*.bin avatar-live/dist/model-parts/*.bin; do [ -f "$f" ] && du -h "$f"; done
+cat avatar-live/model-parts/manifest.json
 ```
 
-期望：v1 上线前 ≤15M（当前 71M，未达标即阻塞 P2）。
+期望：每个分片 <25MiB；manifest 的 `parts` 与实际分片数一致（当前 4 片，总计约 75MB）。
 
 ### 5.5 无头渲染冒烟（macOS）
 

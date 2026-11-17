@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 
 const EMOTION_KEYS = ['happy', 'angry', 'sad', 'surprised', 'relaxed'];
@@ -10,29 +11,35 @@ export async function createAvatar(scene) {
     console.info('已加载 model.vrm');
     return new VRMAvatar(scene, vrm);
   } catch (e) {
-    console.warn('加载 model.vrm 失败，使用占位角色', e);
+    console.warn('加载模型失败，使用占位角色', e);
     return new PlaceholderAvatar(scene);
   }
 }
 
-function loadVRM() {
-  return new Promise((resolve, reject) => {
-    fetch('./model.vrm', { method: 'HEAD' })
-      .then((res) => {
-        if (!res.ok) return reject(new Error('model.vrm 不存在'));
-        const loader = new GLTFLoader();
-        loader.register((parser) => new VRMLoaderPlugin(parser));
-        loader.load('./model.vrm', (gltf) => {
-          const vrm = gltf.userData.vrm;
-          if (!vrm) return reject(new Error('不是有效的 VRM'));
-          vrm.scene.traverse((o) => { o.frustumCulled = false; });
-          // VRM 0.x 模型默认背对镜头，转 180°（VRM 1.0 会自动跳过）
-          VRMUtils.rotateVRM0(vrm);
-          resolve(vrm);
-        }, undefined, reject);
-      })
-      .catch(reject);
+async function loadVRM() {
+  const manifest = await (await fetch('./model-parts/manifest.json')).json();
+  const parts = [];
+  for (let i = 0; i < manifest.parts; i++) {
+    const res = await fetch(`./model-parts/part-${i}.bin`);
+    if (!res.ok) throw new Error(`model-parts 缺少 part-${i}`);
+    parts.push(new Uint8Array(await res.arrayBuffer()));
+  }
+  const total = parts.reduce((n, p) => n + p.length, 0);
+  const merged = new Uint8Array(total);
+  let off = 0;
+  for (const p of parts) { merged.set(p, off); off += p.length; }
+
+  const loader = new GLTFLoader();
+  loader.setMeshoptDecoder(MeshoptDecoder);
+  loader.register((parser) => new VRMLoaderPlugin(parser));
+  const gltf = await new Promise((resolve, reject) => {
+    loader.parse(merged.buffer, '', resolve, reject);
   });
+  const vrm = gltf.userData.vrm;
+  if (!vrm) throw new Error('不是有效的 VRM');
+  vrm.scene.traverse((o) => { o.frustumCulled = false; });
+  VRMUtils.rotateVRM0(vrm);
+  return vrm;
 }
 
 // 统一接口: setEmotion(name), setGaze(x, y), setTalking(bool), update(dt, t), frame

@@ -13,3 +13,7 @@ avatar-live/memory.db
 # Tool artifacts / logs
 avatar-live/artifacts/
 avatar-live/browser_log.jsonl
+
+# Generated model parts (build artifact)
+avatar-live/model-parts/
+avatar-live/dist/
