@@ -1,0 +1,12 @@
+{
+  "name": "reactive-avatar",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "^5.1.0"
+  }
+}

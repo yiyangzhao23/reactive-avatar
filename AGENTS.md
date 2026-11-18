@@ -32,6 +32,29 @@
 > 本项目未使用 TypeScript / Vite / ruff / mypy，因此不适用上面的工具链；上述门禁等价且更快。
 > Node 不在 PATH 时，脚本会自动使用 `~/.local/node/bin/node`。
 
+## 测试（单元 / 集成）
+
+```bash
+./scripts/test.sh        # Vitest + pytest（约 2–3s）
+```
+
+单独运行：
+
+```bash
+export PATH="$HOME/.local/node/bin:$PATH"
+npm test                 # tests/js：模型切分、/llm Function、manifest 对齐
+uv run pytest -q         # tests/python：记忆、HTTP 接口、证据边界、跨文件对齐
+```
+
+覆盖范围：
+- **程序逻辑**：模型切分（大小/哈希/清单/旧分片清理）、`/llm` 代理（缺 Key/超大请求/上游状态透传）、manifest 与分片对齐
+- **后端接口**：SQLite 记忆增删查清、静态页、`/tts` 参数校验、`/memory` HTTP 往返
+- **历史证据边界**：`docs/evidence.md` 每行必须是「据 / 推断 / 设」；A 类必须有可追溯来源（文件/命令/官方来源/项目方确认）；`docs/*.md|html` 不得出现未来日期（年代防穿越）
+- **跨文件 ID 对齐**：前端 `?v=` 版本、PWA 缓存名、Pages Function 上游地址、计划/证据/目标互相引用
+- **可选 LLM-as-a-Judge**：`docs/judge-rubric.md` + `scripts/judge.py <transcript.jsonl>`（需 `OPENCODE_API_KEY`，无 Key 不发送任何数据）
+
+依赖：Vitest 由 `npm i -D vitest` 安装；Python 侧用 `uv add --dev pytest httpx`。`.venv/`、`node_modules/` 已在 `.gitignore`。
+
 ## 修改后约定
 
 1. **改 JS/CSS 要升版本号**：`avatar-live/index.html` 中 `src/main.js?v=NN`；被改文件的 import 版本（如 `avatar.js?v=NN`）也要加一，避免 Pages CDN 命中旧文件。

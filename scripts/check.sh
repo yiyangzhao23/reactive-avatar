@@ -13,19 +13,25 @@ else
   exit 1
 fi
 
-files=(
+esm_files=(
   avatar-live/src/*.js
+  avatar-live/functions/llm.js
+)
+cjs_files=(
   avatar-live/build.js
   avatar-live/split-model.js
-  avatar-live/functions/llm.js
   avatar-live/sw.js
 )
 
-for f in "${files[@]}"; do
+for f in "${esm_files[@]}"; do
+  "$NODE" --input-type=module --check < "$f"
+done
+for f in "${cjs_files[@]}"; do
   "$NODE" --check "$f"
 done
 
 python3 -c "import ast; ast.parse(open('avatar-live/server.py').read())"
+for f in scripts/*.py; do python3 -c "import ast,sys; ast.parse(open(sys.argv[1]).read())" "$f"; done
 
 grep -q 'src="./src/main.js' avatar-live/index.html
 

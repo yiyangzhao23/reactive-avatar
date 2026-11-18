@@ -33,3 +33,7 @@ voice/*.txt
 # Generated model parts (build artifact)
 avatar-live/model-parts/
 avatar-live/dist/
+
+# Test caches
+.pytest_cache/
+coverage/
