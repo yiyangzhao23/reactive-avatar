@@ -4,9 +4,12 @@
   "type": "commonjs",
   "scripts": {
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:live": "BASE_URL=https://reactive-avatar.pages.dev playwright test tests/e2e/live.spec.js"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.1",
     "vitest": "^5.1.0"
   }
 }

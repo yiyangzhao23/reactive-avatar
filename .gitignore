@@ -37,3 +37,7 @@ avatar-live/dist/
 # Test caches
 .pytest_cache/
 coverage/
+
+# Playwright
+playwright-report/
+test-results/

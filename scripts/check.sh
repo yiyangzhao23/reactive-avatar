@@ -16,6 +16,10 @@ fi
 esm_files=(
   avatar-live/src/*.js
   avatar-live/functions/llm.js
+  tests/js/*.test.js
+  tests/e2e/*.spec.js
+  playwright.config.js
+  vitest.config.js
 )
 cjs_files=(
   avatar-live/build.js

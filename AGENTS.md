@@ -55,6 +55,27 @@ uv run pytest -q         # tests/python：记忆、HTTP 接口、证据边界、
 
 依赖：Vitest 由 `npm i -D vitest` 安装；Python 侧用 `uv add --dev pytest httpx`。`.venv/`、`node_modules/` 已在 `.gitignore`。
 
+## 端到端（Playwright）
+
+首次安装内核（一次）：
+
+```bash
+npx playwright install chromium
+```
+
+运行：
+
+```bash
+npm run test:e2e        # 本地：自动启动/复用 server.py（8017）
+npm run test:e2e:live   # 线上冒烟：BASE_URL=https://reactive-avatar.pages.dev
+./scripts/test.sh --e2e # 单元 + 集成 + 本地 E2E
+```
+
+- `opencode.json` 已配置 `@playwright/mcp`（`npx -y @playwright/mcp@latest`），重启 opencode 后生效；agent 可自行读取 DOM、控制台、404 与截图。
+- 覆盖：模型加载、资源 404/控制台错误、聊天本地回退、语言切换、分析前提示、摄像头开关（假设备）。
+- 线上冒烟：同一套用例 + `/llm` 无 Key 401。
+- 摄像头/麦克风用 fake device；**屏幕共享不做自动化**（需人工选择窗口）。
+
 ## 修改后约定
 
 1. **改 JS/CSS 要升版本号**：`avatar-live/index.html` 中 `src/main.js?v=NN`；被改文件的 import 版本（如 `avatar.js?v=NN`）也要加一，避免 Pages CDN 命中旧文件。

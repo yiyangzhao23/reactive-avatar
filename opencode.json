@@ -1,0 +1,12 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "playwright": {
+        "type": "local",
+        "command": ["bash", "-lc", "export PATH=\"$HOME/.local/node/bin:$PATH\"; exec npx -y @playwright/mcp@latest"],
+        "environment": {}
+      }
+    }
+  }
+}
