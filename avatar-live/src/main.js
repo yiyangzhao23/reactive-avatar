@@ -3,6 +3,7 @@ import { createAvatar } from './avatar.js?v=12';
 import { startCamera, startScreenShare, startFaceTracking, stopCamera, stopScreenShare, captureScreen, state } from './perception.js?v=11';
 import { Brain } from './brain.js?v=11';
 import { startRecording, stopRecording, transcribe, startHandsFree, stopHandsFree } from './voice.js?v=11';
+import { GeminiLive } from './live.js?v=1';
 
 const IS_DEV = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 
@@ -101,6 +102,14 @@ const I18N = {
     browserConfirmClick: '要点击这个元素吗？',
     browserReadDone: '网页内容已读到，看右侧日志。',
     browserScreenshot: '截图已保存：',
+    liveStart: '实时模式（Gemini Live）',
+    liveStop: '停止实时模式',
+    liveNeedGemini: '实时模式需要 Gemini Key：请选择 Gemini 并保存 Key。',
+    liveConnecting: '实时模式连接中…',
+    liveConnected: '实时模式已连接：直接说话；共享屏幕后画面会以 1fps 发送。',
+    liveClosed: '实时模式已关闭。',
+    liveError: '实时模式错误：',
+    liveScreenHint: '共享屏幕后，她会持续看到当前画面。',
     handsFreeStart: '连续语音',
     handsFreeStop: '停止连续语音',
     handsFreeOn: '连续语音已开启，直接说话即可。',
@@ -172,6 +181,14 @@ const I18N = {
     browserConfirmClick: 'Click this element? ',
     browserReadDone: 'Page text loaded; see the log.',
     browserScreenshot: 'Screenshot saved: ',
+    liveStart: 'Live mode (Gemini Live)',
+    liveStop: 'Stop live mode',
+    liveNeedGemini: 'Live mode needs a Gemini key: choose Gemini and save a key.',
+    liveConnecting: 'Connecting live mode…',
+    liveConnected: 'Live mode connected: just speak; shared screen frames are sent at 1 fps.',
+    liveClosed: 'Live mode stopped.',
+    liveError: 'Live mode error: ',
+    liveScreenHint: 'Share your screen and she will keep seeing the current frame.',
     handsFreeStart: 'Hands-free',
     handsFreeStop: 'Stop hands-free',
     handsFreeOn: 'Hands-free on. Just speak.',
@@ -234,6 +251,10 @@ function renderVoiceOptions() {
   voiceSel.value = VOICE_OPTIONS.some((o) => o.v === cur) ? cur : 'gemini:Aoede';
   localStorage.setItem('voiceMode', voiceSel.value);
 }
+const liveBtn = $('liveBtn');
+const liveStatus = $('liveStatus');
+let live = null;
+let liveActive = false;
 const pauseBtn = $('pausePerception');
 let memoryOn = localStorage.getItem('storyMemoryOn') === '1';
 let perceptionPaused = false;
@@ -336,6 +357,7 @@ function applyLang() {
   keyInput.placeholder = t('keyPh')[providerSel.value];
   renderMemory();
   renderVoiceOptions();
+  liveBtn.textContent = t(liveActive ? 'liveStop' : 'liveStart');
 }
 
 function loadKey() {
@@ -547,6 +569,7 @@ shareBtn.onclick = async () => {
     screenOn = false;
     shareBtn.classList.remove('active'); shareBtn.textContent = t('shareOff');
     $('shareDot').classList.remove('on');
+    live?.setScreenVideo?.(null);
     log(t('shareStopped'));
     return;
   }
@@ -555,10 +578,12 @@ shareBtn.onclick = async () => {
     screenOn = true;
     shareBtn.classList.add('active'); shareBtn.textContent = t('shareOn');
     $('shareDot').classList.add('on');
+    live?.setScreenVideo?.(screenVideo);
     stream.getVideoTracks()[0].addEventListener('ended', () => {
       screenOn = false;
       shareBtn.classList.remove('active'); shareBtn.textContent = t('shareOff');
       $('shareDot').classList.remove('on');
+      live?.setScreenVideo?.(null);
       stopScreenShare();
     });
     react('surprised', t('shareOpen'));
@@ -965,7 +990,7 @@ function react(emotion, line, action = 'none') {
   if (action && action !== 'none') avatar?.playGesture(action);
   $('emoBadge').textContent = emotion;
   log(line, emotion);
-  speak(line);
+  if (!liveActive) speak(line);
   clearTimeout(emoTimer);
   emoTimer = setTimeout(() => avatar?.setEmotion('neutral'), 6000);
 }
@@ -984,6 +1009,79 @@ brain.emit = (emotion, line, action = 'none') => {
   brain.lastEmit = now;
   react(emotion, line, action);
 };
+
+// ---------- Gemini Live ----------
+const LIVE_SYSTEM = `你是小可，一个住在网页里的 3D 虚拟伙伴。你可以同时听到用户的声音、看到用户共享的屏幕（约 1fps）。
+用简短、自然、有性格的口语回答，默认中文；用户说英文时用英文。不要每句话都描述屏幕，只在相关时提到你看到的画面。
+你知道自己是一个合成角色，不要假装是真人；不确定时说不确定，不要编造。`;
+
+async function startLiveMode() {
+  const key = localStorage.getItem('geminiKey');
+  if (!key) { log(t('liveNeedGemini')); return; }
+  if (liveActive) return;
+  stopSpeaking();
+  liveStatus.textContent = t('liveConnecting');
+  liveBtn.disabled = true;
+  live = new GeminiLive({
+    getLang: () => lang,
+    system: LIVE_SYSTEM,
+    onStatus: (state) => {
+      if (state === 'connecting') liveStatus.textContent = t('liveConnecting');
+      if (state === 'connected') liveStatus.textContent = t('liveConnected');
+      if (state.startsWith('closed')) liveStatus.textContent = t('liveClosed');
+    },
+    onUserText: (txt) => log(txt, null, true),
+    onUserInterim: (txt) => { chatInput.value = txt; },
+    onModelText: (txt) => {
+      avatar?.setEmotion('relaxed');
+      log(txt, 'relaxed');
+    },
+    onLevel: (level) => { avatar?.setMouth(level > 0.03 ? level : 0); },
+    onSpeaking: (on) => {
+      setTalking(on);
+      if (!on) avatar?.setMouth(null);
+    },
+    onError: (e) => log(t('liveError') + e),
+  });
+  try {
+    await live.start({
+      apiKey: key,
+      model: localStorage.getItem('liveModel') || 'gemini-3.8-live',
+      screenVideo: state.screen.video,
+    });
+    liveActive = true;
+    liveBtn.textContent = t('liveStop');
+    liveBtn.classList.add('active');
+    liveStatus.textContent = t('liveConnected');
+    handsFreeBtn.disabled = true;
+    micBtn.disabled = true;
+    log(t('liveConnected'));
+  } catch (e) {
+    log(t('liveError') + e.message);
+    liveStatus.textContent = '';
+    try { live?.stop(); } catch {}
+    live = null;
+    liveActive = false;
+  } finally {
+    liveBtn.disabled = false;
+  }
+}
+
+function stopLiveMode() {
+  try { live?.stop(); } catch {}
+  live = null;
+  liveActive = false;
+  liveBtn.textContent = t('liveStart');
+  liveBtn.classList.remove('active');
+  liveStatus.textContent = t('liveClosed');
+  handsFreeBtn.disabled = false;
+  micBtn.disabled = false;
+  setTalking(false);
+  avatar?.setMouth(null);
+  log(t('liveClosed'));
+}
+
+liveBtn.onclick = () => (liveActive ? stopLiveMode() : startLiveMode());
 
 // ---------- 语音聊天 ----------
 const micBtn = $('micBtn');
@@ -1072,6 +1170,11 @@ async function sendUserText(text) {
   }
   if (/(看|总结|分析).{0,12}(屏幕|画面)|summarize.{0,20}screen|look at.{0,20}screen/i.test(line)) {
     await analyzeScreen();
+    return;
+  }
+
+  if (liveActive) {
+    live.sendText(line);
     return;
   }
 

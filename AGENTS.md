@@ -4,6 +4,8 @@
 
 桌面优先的 3D 虚拟角色（VRM「破茧」）：摄像头 + 屏幕共享感知，BYOK 调用 Gemini / DeepSeek / OpenCode，支持对话、语音、屏幕分析与剧情记忆。
 
+可选 **Gemini Live 实时模式**：浏览器 WebSocket 直连 Live API，麦克风 PCM16 流 + 共享屏幕 1fps 帧 + 原生音频输出；需要 Gemini Key（香港可能受区域限制）。
+
 - 前端：无构建的浏览器 ESM（importmap + CDN），入口 `avatar-live/index.html`
 - 本地服务：`avatar-live/server.py`（静态托管、`/llm`、`/tts`、`/voice`、`/memory`）
 - 部署：GitHub `main` → Cloudflare Pages，根目录 `avatar-live`，构建 `node build.js`，输出 `dist`
@@ -122,6 +124,7 @@ git push origin main
 | `avatar-live/src/avatar.js` | VRM 加载、表情、待机动作、构图 |
 | `avatar-live/src/perception.js` | 摄像头、屏幕共享、MediaPipe |
 | `avatar-live/src/voice.js` | 录音与语音转写 |
+| `avatar-live/src/live.js` | Gemini Live WebSocket：麦克风 PCM、屏幕帧、原生音频播放 |
 | `avatar-live/server.py` | 本地开发服务（含 `/llm` 代理、本地 TTS） |
 | `avatar-live/build.js` | 生成 `dist/`、安全头、模型分片 |
 | `avatar-live/split-model.js` | 模型切分（哈希命名，支持 `--watch`） |

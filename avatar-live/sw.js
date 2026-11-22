@@ -1,4 +1,4 @@
-const CACHE = 'reactive-avatar-v5';
+const CACHE = 'reactive-avatar-v6';
 const CORE = [
   '/',
   '/index.html',
@@ -11,6 +11,7 @@ const CORE = [
   '/src/brain.js',
   '/src/perception.js',
   '/src/voice.js',
+  '/src/live.js',
 ];
 
 self.addEventListener('install', (event) => {
