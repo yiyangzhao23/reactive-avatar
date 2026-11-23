@@ -125,8 +125,10 @@ git push origin main
 | `avatar-live/src/perception.js` | 摄像头、屏幕共享、MediaPipe |
 | `avatar-live/src/voice.js` | 录音与语音转写 |
 | `avatar-live/src/live.js` | Gemini Live WebSocket：麦克风 PCM、屏幕帧、原生音频播放 |
+| `avatar-live/src/main.js` | 模型设置弹窗；Key 仅页面内存 |
 | `avatar-live/server.py` | 本地开发服务（含 `/llm` 代理、本地 TTS） |
 | `avatar-live/build.js` | 生成 `dist/`、安全头、模型分片 |
 | `avatar-live/split-model.js` | 模型切分（哈希命名，支持 `--watch`） |
-| `avatar-live/functions/llm.js` | 线上 Pages Function（BYOK 代理） |
+| `avatar-live/functions/llm.js` | 线上 Pages Function（旧 OpenCode 代理） |
+| `avatar-live/functions/api/chat.js` | 线上 Pages Function：OpenAI/Gemini/DeepSeek/OpenRouter/自定义 BYOK 代理 |
 | `docs/` | 计划、证据表、目标声明、架构与流程图 |

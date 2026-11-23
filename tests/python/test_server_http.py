@@ -34,3 +34,9 @@ def test_memory_http_roundtrip(http_server):
     cleared = httpx.post(f"{http_server}/memory/clear", json={}, timeout=10)
     assert cleared.status_code == 200
     assert httpx.get(f"{http_server}/memory?limit=5", timeout=10).json()["memories"] == []
+
+
+def test_chat_requires_key(http_server):
+    res = httpx.post(f"{http_server}/api/chat", json={"messages": []}, timeout=10)
+    assert res.status_code == 400
+    assert "no API key" in res.json()["error"]

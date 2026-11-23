@@ -180,8 +180,9 @@ async function callDeepSeek(key, system, history, userText) {
 }
 
 export class Brain {
-  constructor({ getKey, getProvider, getLang, onLine, onEmotion }) {
+  constructor({ getKey, getProvider, getLang, getLlm, onLine, onEmotion }) {
     this.getKey = getKey;
+    this.getLlm = getLlm;
     this.getProvider = getProvider ?? (() => 'deepseek');
     this.getLang = getLang ?? (() => 'zh');
     this.onLine = onLine;
@@ -240,19 +241,36 @@ export class Brain {
   }
 
   async call(system, userPartsOrText) {
-    const provider = this.getProvider();
-    const key = this.getKey();
-    if (provider === 'gemini') {
-      const parts = Array.isArray(userPartsOrText) ? userPartsOrText : [{ text: userPartsOrText }];
-      return callGemini(key, system, this.history, parts);
-    }
-    if (provider === 'opencode') {
-      return callOpenCode(key, system, this.history, userPartsOrText);
-    }
-    const text = Array.isArray(userPartsOrText)
-      ? userPartsOrText.filter((p) => p.text).map((p) => p.text).join('\n')
-      : userPartsOrText;
-    return callDeepSeek(key, system, this.history, text);
+    const llm = this.getLlm?.() || {
+      provider: this.getProvider(),
+      model: '',
+      base_url: '',
+      api_key: this.getKey(),
+    };
+    if (!llm.api_key) throw new Error('no model key');
+    const messages = [
+      { role: 'system', content: system },
+      ...this.history,
+      { role: 'user', content: toOpenAIContent(userPartsOrText) },
+    ];
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        llm: {
+          provider: llm.provider,
+          model: llm.model,
+          base_url: llm.base_url,
+          api_key: llm.api_key,
+        },
+        messages,
+        temperature: 0.8,
+      }),
+    });
+    const text = await res.text();
+    if (!res.ok) throw new Error(text.slice(0, 300) || `HTTP ${res.status}`);
+    const json = JSON.parse(text);
+    return json.choices?.[0]?.message?.content?.trim() ?? '';
   }
 
   tick(now = performance.now()) {

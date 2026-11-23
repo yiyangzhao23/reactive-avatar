@@ -46,6 +46,51 @@ TTS_SPEED = float(os.environ.get('TTS_SPEED', '1.0'))
 TTS_SEED = int(os.environ.get('TTS_SEED', '42'))
 TTS_GAIN_DB = float(os.environ.get('TTS_GAIN_DB', '8'))
 TTS_CACHE_VERSION = os.environ.get('TTS_CACHE_VERSION', 'xiaoke-v1')
+
+LLM_PRESETS = {
+    'openai': ('https://api.openai.com/v1/chat/completions', 'gpt-4o-mini'),
+    'gemini': ('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', 'gemini-2.0-flash'),
+    'deepseek': ('https://api.deepseek.com/chat/completions', 'deepseek-chat'),
+    'openrouter': ('https://openrouter.ai/api/v1/chat/completions', 'deepseek/deepseek-chat'),
+    'opencode': ('https://opencode.ai/inference/openai/v1/chat/completions', 'gemini-3.5-flash-lite'),
+}
+
+
+def request_llm(payload):
+    raw = payload.get('llm') if isinstance(payload.get('llm'), dict) else {}
+    key = str(raw.get('api_key') or '').strip()[:512]
+    provider = str(raw.get('provider') or '').strip().lower()
+    model = str(raw.get('model') or '').strip()[:160]
+    base_url = str(raw.get('base_url') or '').strip()[:500]
+
+    if not key:
+        env_map = {
+            'openai': os.environ.get('OPENAI_API_KEY', '').strip(),
+            'gemini': os.environ.get('GEMINI_API_KEY', '').strip(),
+            'deepseek': os.environ.get('DEEPSEEK_API_KEY', '').strip(),
+            'openrouter': os.environ.get('OPENROUTER_API_KEY', '').strip(),
+        }
+        provider = provider or ('deepseek' if env_map['deepseek'] else 'gemini' if env_map['gemini'] else 'openai')
+        key = env_map.get(provider, '') or os.environ.get('LLM_API_KEY', '').strip()
+        if not key:
+            raise ValueError('no API key: open 模型设置 or set a server key')
+        if provider == 'custom':
+            base_url = os.environ.get('LLM_API_URL', '').strip()
+            model = model or os.environ.get('LLM_MODEL', '').strip()
+
+    if provider == 'custom':
+        if not (base_url.startswith('https://') or base_url.startswith('http://127.0.0.1') or base_url.startswith('http://localhost')):
+            raise ValueError('custom base_url must be https:// or localhost')
+        if not model:
+            raise ValueError('custom model is empty')
+        api_url = base_url
+    else:
+        if provider not in LLM_PRESETS:
+            provider = 'deepseek'
+        api_url, default_model = LLM_PRESETS[provider]
+        model = model or default_model
+
+    return {'provider': provider, 'api_key': key, 'api_url': api_url, 'model': model}
 MAX_VOICE_BYTES = 30 * 1024 * 1024
 ALLOWED_EXT = {'wav', 'mp3', 'm4a', 'flac', 'ogg', 'aac'}
 
@@ -565,6 +610,46 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self.send_json({'ok': True, 'current': voice_public(voice)})
             except Exception as e:
                 self.send_json({'ok': False, 'error': str(e)}, 400)
+            return
+
+        if self.path.startswith('/api/chat'):
+            try:
+                payload = self.read_json()
+                llm = request_llm(payload)
+                body = {
+                    'model': llm['model'],
+                    'messages': payload.get('messages') or [],
+                    'temperature': payload.get('temperature', 0.7),
+                }
+                if payload.get('response_format') and llm['provider'] != 'gemini':
+                    body['response_format'] = payload['response_format']
+                headers = {
+                    'Content-Type': 'application/json',
+                    'Authorization': f"Bearer {llm['api_key']}",
+                }
+                if llm['provider'] == 'openrouter':
+                    headers['HTTP-Referer'] = 'http://127.0.0.1:8017'
+                    headers['X-Title'] = 'Reactive Avatar'
+                req = urllib.request.Request(
+                    llm['api_url'],
+                    data=json.dumps(body, ensure_ascii=False).encode('utf-8'),
+                    headers=headers,
+                    method='POST',
+                )
+                try:
+                    with urllib.request.urlopen(req, timeout=120) as res:
+                        data = res.read()
+                        status = res.status
+                except urllib.error.HTTPError as exc:
+                    data = exc.read()
+                    status = exc.code
+                self.send_response(status)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.send_header('Content-Length', str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+            except Exception as e:
+                self.send_json({'error': str(e)}, 400)
             return
 
         if self.path.startswith('/llm'):

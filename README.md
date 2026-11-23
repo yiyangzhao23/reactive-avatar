@@ -11,7 +11,9 @@ the page and proxies model/TTS requests.
 - 3D VRM avatar with blinking, breathing, gaze tracking, expressions and gestures
 - Webcam perception via MediaPipe (face position, smile, blink)
 - Screen sharing + local brightness sensing + optional vision-model screenshots
-- Providers: DeepSeek (text), Gemini (multimodal), OpenCode (Console)
+- Model settings modal: OpenAI / Gemini / DeepSeek / OpenRouter / custom OpenAI-compatible endpoint
+- Keys stay in page memory only; requests go through the local server (`/api/chat`) or the deployed Pages Function; never written to disk or logs
+- Server environment keys can fall back; with no key the page uses the offline fallback
 - Local TTS via macOS `say`; optional fixed voice via GPT-SoVITS
 - Hands-free voice mode: browser speech recognition with interim transcripts,
   automatic sentence-level TTS, and barge-in interruption
@@ -34,8 +36,10 @@ python3 server.py
 # open http://127.0.0.1:8017/
 ```
 
-No Python packages are required for the basic page. API keys are entered in the
-page and stored in the browser's `localStorage`; they are never committed.
+No Python packages are required for the basic page. Open **模型设置 / Model
+settings** to choose a provider, model, and key. The key is kept in page memory
+only: refresh clears it, and it is sent to the local server for forwarding, not
+written to disk or logs. Server environment keys can be used as a fallback.
 
 For browser automation, install the optional dependency (it uses your installed
 Google Chrome):
@@ -98,9 +102,19 @@ camera / screen
 | `src/perception.js` | webcam, screen share, MediaPipe |
 | `src/brain.js` | model calls, prompts, memory, autonomous gesture inference |
 | `src/voice.js` | microphone recording, transcription, hands-free recognition |
-| `server.py` | static server, `/llm`, `/tts`, `/voice`, `/memory`, `/computer` |
+| `server.py` | static server, `/api/chat`, `/llm`, `/tts`, `/voice`, `/memory`, `/computer` |
+| `functions/api/chat.js` | deployed Pages Function for BYOK model requests |
 | `manifest.webmanifest`, `sw.js` | PWA install + shell cache |
 | `voice/` | optional GPT-SoVITS setup |
+
+## Model settings
+
+The page opens **模型设置** on every load. Choose OpenAI, Gemini, DeepSeek,
+OpenRouter, or a custom OpenAI-compatible endpoint; enter a model and key.
+The key is memory-only. Gemini requests automatically omit `response_format`
+when the endpoint does not support it. Custom URLs must be `https://` or
+`localhost`. Cost estimates use DeepSeek pricing; other providers are billed by
+their own accounts.
 
 ## Browser automation
 
@@ -145,7 +159,7 @@ Explicit requests such as “挥挥手” or “点点头” also work.
 ## Privacy and limits
 
 - Webcam and screen frames stay local unless you use a vision provider.
-- API keys live in `localStorage`; this is a prototype, not a secure product.
+- API keys live in page memory only; the local server forwards them and does not write them to disk or logs. This is still a prototype, not a secure product.
 - The server binds to `127.0.0.1` and has no authentication or rate limiting.
 - Memory is stored locally in `memory.db`; it has source and expiry fields, but
   the prototype does not encrypt the database.

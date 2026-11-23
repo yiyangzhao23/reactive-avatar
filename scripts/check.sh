@@ -16,6 +16,7 @@ fi
 esm_files=(
   avatar-live/src/*.js
   avatar-live/functions/llm.js
+  avatar-live/functions/api/chat.js
   tests/js/*.test.js
   tests/e2e/*.spec.js
   playwright.config.js

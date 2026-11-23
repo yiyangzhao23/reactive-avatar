@@ -89,3 +89,19 @@ select {
   background: #0f1220; color: #e8eaf2; font-size: 12px; font-family: inherit;
 }
 .voice-box textarea { resize: vertical; min-height: 48px; }
+
+.model-dialog {
+  position: fixed; top: 16px; right: 16px; width: min(360px, calc(100vw - 32px));
+  border: 1px solid #2a2f4a; border-radius: 14px; padding: 16px;
+  background: #171a2b; color: #e8eaf2; box-shadow: 0 18px 50px rgba(0,0,0,.45);
+  z-index: 50;
+}
+.model-dialog::backdrop { background: transparent; }
+.model-dialog h2 { font-size: 15px; margin: 0 0 6px; }
+.model-dialog label { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; font-size: 11px; color: #9aa1c0; }
+.model-dialog input, .model-dialog select {
+  width: 100%; padding: 8px 9px; border-radius: 8px; border: 1px solid #2a2f4a;
+  background: #0f1220; color: #e8eaf2; font-size: 12px; font-family: inherit;
+}
+.model-dialog .row { margin-top: 10px; }
+#modelBaseRow.hidden { display: none; }

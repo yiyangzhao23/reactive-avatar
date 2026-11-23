@@ -74,3 +74,18 @@ test('camera toggles on and off (fake device)', async ({ page }) => {
   await expect(page.locator('#camBtn')).toHaveText('开启摄像头');
   await expect(page.locator('#camDot')).not.toHaveClass(/on/);
 });
+
+test('model settings save in memory and clear on reload', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#modelDialog')).toHaveAttribute('open', '');
+  await page.selectOption('#modelProvider', 'custom');
+  await page.fill('#modelName', 'fake');
+  await page.fill('#modelKey', 'secret');
+  await page.fill('#modelBase', 'http://127.0.0.1:9999/v1/chat/completions');
+  await page.click('#modelSave');
+  await expect(page.locator('#modelStatus')).toContainText('custom');
+
+  await page.reload();
+  await expect(page.locator('#modelDialog')).toHaveAttribute('open', '');
+  await expect(page.locator('#modelStatus')).toContainText('离线');
+});

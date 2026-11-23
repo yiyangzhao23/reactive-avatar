@@ -65,6 +65,21 @@ const I18N = {
     ledgerEmpty: '暂无记忆。',
     ledgerMemory: '最近记忆：',
     perceptionResumed: '感知已继续：新的观察会再次发送给模型。',
+    modelSettings: '模型设置',
+    modelTitle: '模型设置 · 使用你自己的 API Key',
+    modelHint: 'Key 只保存在本页内存：刷新或关闭页面即清空。请求先发到本机服务器再转发；不写磁盘、不写入日志。',
+    modelProvider: '服务商',
+    modelModel: '模型',
+    modelKey: 'API Key',
+    modelBase: '自定义地址',
+    modelCustom: '自定义接口',
+    modelSave: '保存并开始',
+    modelSkip: '暂不设置（离线）',
+    modelCostNote: '费用估算按 DeepSeek 价格展示；OpenAI / Gemini / OpenRouter / 自定义接口以账单为准。',
+    modelOffline: '离线 fallback：未设置 Key',
+    modelReady: '当前：',
+    modelInvalidBase: '自定义地址必须以 https:// 或 http://localhost 开头',
+    modelSaved: '模型设置已保存（仅本页内存）。',
     save: '保存', send: '发送',
     camOff: '开启摄像头', camOn: '摄像头已开启', camStopped: '摄像头已关闭',
     shareOff: '共享屏幕', shareOn: '屏幕共享中', shareStopped: '屏幕共享已停止',
@@ -84,7 +99,7 @@ const I18N = {
     analyze: '分析当前画面',
     analyzing: '正在分析画面…',
     needScreen: '请先点“共享屏幕”，再分析',
-    needGeminiVision: '画面分析需要 Gemini 或 OpenCode Key（DeepSeek 看不到画面）：上方选择并保存 Key',
+    needGeminiVision: '画面分析需要能看图的模型（Gemini / OpenAI / OpenRouter / 自定义视觉模型）；DeepSeek 看不到画面。',
     analyzeFail: '分析失败: ',
     memoryOn: '剧情记忆：开', memoryOff: '剧情记忆：关',
     clearMemory: '清空记忆', memoryCleared: '剧情记忆已清空', memoryAdded: '已记入剧情记忆',
@@ -144,6 +159,21 @@ const I18N = {
     ledgerEmpty: 'No memory yet.',
     ledgerMemory: 'Recent memory:',
     perceptionResumed: 'Perception resumed: new observations are sent to the model again.',
+    modelSettings: 'Model settings',
+    modelTitle: 'Model settings · use your own API key',
+    modelHint: 'The key stays in this page memory only: refresh or close the page to clear it. Requests go to the local server, which forwards them; no disk writes, no logs.',
+    modelProvider: 'Provider',
+    modelModel: 'Model',
+    modelKey: 'API key',
+    modelBase: 'Custom base URL',
+    modelCustom: 'Custom endpoint',
+    modelSave: 'Save and start',
+    modelSkip: 'Skip (offline)',
+    modelCostNote: 'Cost estimates use DeepSeek pricing; OpenAI / Gemini / OpenRouter / custom endpoints are billed by your provider.',
+    modelOffline: 'Offline fallback: no key set',
+    modelReady: 'Using: ',
+    modelInvalidBase: 'Custom base URL must start with https:// or http://localhost',
+    modelSaved: 'Model settings saved (this page only).',
     save: 'Save', send: 'Send',
     camOff: 'Start camera', camOn: 'Camera on', camStopped: 'Camera off',
     shareOff: 'Share screen', shareOn: 'Sharing screen', shareStopped: 'Screen sharing stopped',
@@ -163,7 +193,7 @@ const I18N = {
     analyze: 'Analyze screen',
     analyzing: 'Analyzing the screen…',
     needScreen: 'Click “Share screen” first, then analyze',
-    needGeminiVision: 'Screen analysis needs a Gemini or OpenCode key (DeepSeek cannot see): pick one above and save a key',
+    needGeminiVision: 'Screen analysis needs a vision model (Gemini / OpenAI / OpenRouter / custom); DeepSeek cannot see images.',
     analyzeFail: 'Analysis failed: ',
     memoryOn: 'Story memory: on', memoryOff: 'Story memory: off',
     clearMemory: 'Clear memory', memoryCleared: 'Story memory cleared', memoryAdded: 'Saved to story memory',
@@ -222,13 +252,30 @@ const t = (k) => I18N[lang][k];
 const $ = (id) => document.getElementById(id);
 const camBtn = $('camBtn'), shareBtn = $('shareBtn');
 const camPreview = $('camPreview'), screenVideo = $('screenVideo');
-const keyInput = $('apiKey');
-const providerSel = $('provider');
 const langSel = $('lang');
+const modelBtn = $('modelBtn');
+const modelStatus = $('modelStatus');
+const modelDialog = $('modelDialog');
+const modelProvider = $('modelProvider');
+const modelName = $('modelName');
+const modelKey = $('modelKey');
+const modelBase = $('modelBase');
+const modelBaseRow = $('modelBaseRow');
+const modelError = $('modelError');
 let camOn = false, screenOn = false;
 
-const keyStore = (p) => (p === 'gemini' ? 'geminiKey' : p === 'opencode' ? 'opencodeKey' : 'deepseekKey');
-const getProvider = () => localStorage.getItem('provider') ?? 'deepseek';
+const MODEL_PRESETS = {
+  openai: { model: 'gpt-4o-mini', base_url: '' },
+  gemini: { model: 'gemini-2.0-flash', base_url: '' },
+  deepseek: { model: 'deepseek-chat', base_url: '' },
+  openrouter: { model: 'deepseek/deepseek-chat', base_url: '' },
+  custom: { model: '', base_url: '' },
+};
+let modelSettings = { provider: 'deepseek', model: 'deepseek-chat', api_key: '', base_url: '' };
+const getProvider = () => modelSettings.provider;
+const getKey = () => modelSettings.api_key;
+const getLlm = () => ({ ...modelSettings });
+const getGeminiKey = () => (modelSettings.provider === 'gemini' ? modelSettings.api_key : '');
 
 // ---------- 剧情记忆 ----------
 const memoryBtn = $('memoryBtn');
@@ -354,33 +401,83 @@ function applyLang() {
   camBtn.textContent = t(camOn ? 'camOn' : 'camOff');
   shareBtn.textContent = t(screenOn ? 'shareOn' : 'shareOff');
   chatInput.placeholder = t('chatPh');
-  keyInput.placeholder = t('keyPh')[providerSel.value];
   renderMemory();
   renderVoiceOptions();
   liveBtn.textContent = t(liveActive ? 'liveStop' : 'liveStart');
-}
-
-function loadKey() {
-  keyInput.value = localStorage.getItem(keyStore(providerSel.value)) ?? '';
-  keyInput.placeholder = t('keyPh')[providerSel.value];
+  updateModelStatus();
 }
 
 langSel.value = lang;
-providerSel.value = localStorage.getItem('provider') ?? 'deepseek';
-loadKey();
 
 langSel.onchange = () => {
   lang = langSel.value;
   localStorage.setItem('lang', lang);
   applyLang();
 };
-providerSel.onchange = () => {
-  localStorage.setItem('provider', providerSel.value);
-  loadKey();
-  log(t('switched')(t('providerName')[providerSel.value]));
-};
 voiceSel.onchange = () => {
   localStorage.setItem('voiceMode', voiceSel.value);
+};
+
+// ---------- 模型设置（仅本页内存） ----------
+function updateModelStatus() {
+  if (modelSettings.api_key) {
+    modelStatus.textContent = `${t('modelReady')}${modelSettings.provider} / ${modelSettings.model}`;
+  } else {
+    modelStatus.textContent = t('modelOffline');
+  }
+}
+
+function syncModelForm() {
+  modelProvider.value = modelSettings.provider;
+  modelName.value = modelSettings.model || MODEL_PRESETS[modelSettings.provider]?.model || '';
+  modelKey.value = modelSettings.api_key || '';
+  modelBase.value = modelSettings.base_url || '';
+  modelBaseRow.classList.toggle('hidden', modelSettings.provider !== 'custom');
+  modelError.textContent = '';
+  updateModelStatus();
+}
+
+function showModelDialog() {
+  syncModelForm();
+  if (typeof modelDialog.show === 'function') {
+    if (!modelDialog.open) modelDialog.show();
+  } else {
+    modelDialog.setAttribute('open', '');
+  }
+}
+
+function closeModelDialog() {
+  if (typeof modelDialog.close === 'function') modelDialog.close();
+  else modelDialog.removeAttribute('open');
+}
+
+modelBtn.onclick = showModelDialog;
+modelProvider.onchange = () => {
+  const preset = MODEL_PRESETS[modelProvider.value] || {};
+  modelBaseRow.classList.toggle('hidden', modelProvider.value !== 'custom');
+  if (!modelName.value || Object.values(MODEL_PRESETS).some((p) => p.model === modelName.value)) {
+    modelName.value = preset.model || '';
+  }
+  if (modelProvider.value === 'custom') modelName.focus();
+};
+modelSkip.onclick = () => {
+  closeModelDialog();
+  updateModelStatus();
+};
+modelSave.onclick = () => {
+  const provider = modelProvider.value;
+  const model = modelName.value.trim() || MODEL_PRESETS[provider]?.model || '';
+  const api_key = modelKey.value.trim();
+  const base_url = modelBase.value.trim();
+  if (provider === 'custom' && !/^(https:\/\/|http:\/\/localhost|http:\/\/127\.0\.0\.1)/.test(base_url)) {
+    modelError.textContent = t('modelInvalidBase');
+    return;
+  }
+  modelSettings = { provider, model, api_key, base_url };
+  if (liveActive) stopLiveMode();
+  updateModelStatus();
+  closeModelDialog();
+  log(t('modelSaved'));
 };
 
 // ---------- 声音克隆 ----------
@@ -533,10 +630,6 @@ pauseBtn.onclick = () => {
   renderLedger();
   log(perceptionPaused ? t('ledgerPaused') : t('perceptionResumed'));
 };
-$('saveKey').onclick = () => {
-  localStorage.setItem(keyStore(providerSel.value), keyInput.value.trim());
-  log(t('savedKey')(providerSel.value));
-};
 
 camBtn.onclick = async () => {
   if (camOn) {
@@ -594,9 +687,9 @@ const analyzeBtn = $('analyzeBtn');
 async function analyzeScreen() {
   if (perceptionPaused) { log(t('ledgerPaused')); return; }
   if (!state.screen.on) { log(t('needScreen')); return; }
-  const provider = getProvider();
-  const gk = localStorage.getItem(keyStore(provider));
-  if (provider === 'deepseek' || !gk) { log(t('needGeminiVision')); return; }
+  const llm = getLlm();
+  if (!llm.api_key) { log(t('modelOffline')); return; }
+  if (llm.provider === 'deepseek') { log(t('needGeminiVision')); return; }
   const thinking = log(t('analyzing'), null, false, 'thinking');
   analyzeBtn.disabled = true;
   try {
@@ -624,44 +717,22 @@ memory: one sentence of new long-term fact; empty string if nothing new.`;
         : 'You are a game assistant. The user is playing a puzzle/story/detective game; this is their current screen. Reply in English: 1) one line summarizing what is happening; 2) point out key clues, items, or suspicious details; 3) give 2-3 concrete actionable suggestions as bullet points. Under 120 words, no pleasantries.';
     }
     let text;
-    if (provider === 'opencode') {
-      const res = await fetch('/llm', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${gk}` },
-        body: JSON.stringify({
-          model: 'gemini-3.5-flash-lite',
-          messages: [{ role: 'user', content: [
-            { type: 'text', text: prompt },
-            { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${img}` } },
-          ] }],
-          temperature: 0.4,
-          ...(memoryOn ? { response_format: { type: 'json_object' } } : {}),
-        }),
-      });
-      if (!res.ok) throw new Error(`OpenCode HTTP ${res.status}`);
-      const json = await res.json();
-      text = json.choices?.[0]?.message?.content?.trim() ?? '';
-    } else {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(gk)}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ role: 'user', parts: [
-              { text: prompt },
-              { inline_data: { mime_type: 'image/jpeg', data: img } },
-            ] }],
-            generationConfig: memoryOn
-              ? { temperature: 0.4, responseMimeType: 'application/json' }
-              : { temperature: 0.4 },
-          }),
-        }
-      );
-      if (!res.ok) throw new Error(`Gemini HTTP ${res.status}`);
-      const json = await res.json();
-      text = json.candidates?.[0]?.content?.parts?.map((x) => x.text).join('').trim() ?? '';
-    }
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        llm,
+        messages: [{ role: 'user', content: [
+          { type: 'text', text: prompt },
+          { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${img}` } },
+        ] }],
+        temperature: 0.4,
+        ...(memoryOn ? { response_format: { type: 'json_object' } } : {}),
+      }),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+    text = json.choices?.[0]?.message?.content?.trim() ?? '';
     thinking.remove();
     if (!text) throw new Error('empty');
     if (memoryOn) {
@@ -814,7 +885,7 @@ function stopSpeaking() {
 }
 
 async function speakGemini(text, voiceName, seq) {
-  const key = localStorage.getItem('geminiKey');
+  const key = getGeminiKey();
   if (!key) throw new Error('no gemini key');
   const models = ['gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts'];
   let json = null;
@@ -997,8 +1068,9 @@ function react(emotion, line, action = 'none') {
 
 
 const brain = new Brain({
-  getKey: () => localStorage.getItem(keyStore(getProvider())) || null,
+  getKey,
   getProvider,
+  getLlm,
   getLang: () => lang,
   onLine: () => {},
   onEmotion: () => {},
@@ -1016,7 +1088,7 @@ const LIVE_SYSTEM = `你是小可，一个住在网页里的 3D 虚拟伙伴。�
 你知道自己是一个合成角色，不要假装是真人；不确定时说不确定，不要编造。`;
 
 async function startLiveMode() {
-  const key = localStorage.getItem('geminiKey');
+  const key = getGeminiKey();
   if (!key) { log(t('liveNeedGemini')); return; }
   if (liveActive) return;
   stopSpeaking();
@@ -1209,7 +1281,7 @@ micBtn.onclick = async () => {
   micBtn.textContent = t('micStart');
   const blob = stopRecording();
   if (!blob) return;
-  const gk = localStorage.getItem('geminiKey');
+  const gk = getGeminiKey();
   if (!gk) { log(t('needGemini')); return; }
   const thinking = log(t('transcribing'), null, false, 'thinking');
   try {
@@ -1270,6 +1342,7 @@ chatForm.onsubmit = async (e) => {
 if (!IS_DEV) document.getElementById('voiceBox')?.remove();
 applyLang();
 if (IS_DEV) loadVoices();
+showModelDialog();
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch((e) => console.warn('service worker failed', e));
