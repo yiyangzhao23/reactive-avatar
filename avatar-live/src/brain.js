@@ -319,7 +319,7 @@ export class Brain {
       return out;
     } catch (e) {
       console.warn('聊天请求失败', e);
-      return { emotion: 'surprised', line: this.s.chatError, action: 'none' };
+      return { emotion: 'surprised', line: `${this.s.chatError} ${e.message || ''}`.trim(), action: 'none' };
     }
   }
 

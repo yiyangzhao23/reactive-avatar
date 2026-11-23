@@ -73,6 +73,10 @@ const I18N = {
     modelKey: 'API Key',
     modelBase: '自定义地址',
     modelCustom: '自定义接口',
+    modelTest: '测试连接',
+    modelTesting: '测试中…',
+    modelTestOk: '连接成功',
+    modelTestFail: '连接失败：',
     modelSave: '保存并开始',
     modelSkip: '暂不设置（离线）',
     modelCostNote: '费用估算按 DeepSeek 价格展示；OpenAI / Gemini / OpenRouter / 自定义接口以账单为准。',
@@ -167,6 +171,10 @@ const I18N = {
     modelKey: 'API key',
     modelBase: 'Custom base URL',
     modelCustom: 'Custom endpoint',
+    modelTest: 'Test connection',
+    modelTesting: 'Testing…',
+    modelTestOk: 'Connection OK',
+    modelTestFail: 'Connection failed: ',
     modelSave: 'Save and start',
     modelSkip: 'Skip (offline)',
     modelCostNote: 'Cost estimates use DeepSeek pricing; OpenAI / Gemini / OpenRouter / custom endpoints are billed by your provider.',
@@ -262,11 +270,12 @@ const modelKey = $('modelKey');
 const modelBase = $('modelBase');
 const modelBaseRow = $('modelBaseRow');
 const modelError = $('modelError');
+const modelTestBtn = $('modelTest');
 let camOn = false, screenOn = false;
 
 const MODEL_PRESETS = {
   openai: { model: 'gpt-4o-mini', base_url: '' },
-  gemini: { model: 'gemini-2.0-flash', base_url: '' },
+  gemini: { model: 'gemini-2.5-flash', base_url: '' },
   deepseek: { model: 'deepseek-chat', base_url: '' },
   openrouter: { model: 'deepseek/deepseek-chat', base_url: '' },
   custom: { model: '', base_url: '' },
@@ -464,20 +473,55 @@ modelSkip.onclick = () => {
   closeModelDialog();
   updateModelStatus();
 };
-modelSave.onclick = () => {
+function readModelForm() {
   const provider = modelProvider.value;
   const model = modelName.value.trim() || MODEL_PRESETS[provider]?.model || '';
   const api_key = modelKey.value.trim();
   const base_url = modelBase.value.trim();
   if (provider === 'custom' && !/^(https:\/\/|http:\/\/localhost|http:\/\/127\.0\.0\.1)/.test(base_url)) {
-    modelError.textContent = t('modelInvalidBase');
+    throw new Error(t('modelInvalidBase'));
+  }
+  return { provider, model, api_key, base_url };
+}
+
+modelSave.onclick = () => {
+  try {
+    modelSettings = readModelForm();
+  } catch (e) {
+    modelError.textContent = e.message;
     return;
   }
-  modelSettings = { provider, model, api_key, base_url };
   if (liveActive) stopLiveMode();
   updateModelStatus();
   closeModelDialog();
   log(t('modelSaved'));
+};
+
+modelTestBtn.onclick = async () => {
+  let llm;
+  try { llm = readModelForm(); } catch (e) { modelError.textContent = e.message; return; }
+  modelError.style.color = '#9aa1c0';
+  modelError.textContent = t('modelTesting');
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ llm, messages: [{ role: 'user', content: 'Reply with OK.' }], temperature: 0 }),
+    });
+    const raw = await res.text();
+    let data = {};
+    try { data = JSON.parse(raw); } catch {}
+    if (!res.ok) {
+      const msg = data?.error?.message || (Array.isArray(data) ? data[0]?.error?.message : '') || data?.error || raw.slice(0, 300) || `HTTP ${res.status}`;
+      throw new Error(msg);
+    }
+    const text = data.choices?.[0]?.message?.content ?? '';
+    modelError.style.color = '#2bb673';
+    modelError.textContent = `${t('modelTestOk')}${text ? ' · ' + text.slice(0, 40) : ''}`;
+  } catch (e) {
+    modelError.style.color = '#e5484d';
+    modelError.textContent = t('modelTestFail') + e.message;
+  }
 };
 
 // ---------- 声音克隆 ----------

@@ -1,4 +1,4 @@
-const CACHE = 'reactive-avatar-v8';
+const CACHE = 'reactive-avatar-v9';
 const CORE = [
   '/',
   '/index.html',

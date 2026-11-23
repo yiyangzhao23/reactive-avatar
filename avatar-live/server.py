@@ -10,6 +10,7 @@ import json
 import os
 import re
 import sqlite3
+import ssl
 import subprocess
 import tempfile
 import urllib.error
@@ -47,9 +48,22 @@ TTS_SEED = int(os.environ.get('TTS_SEED', '42'))
 TTS_GAIN_DB = float(os.environ.get('TTS_GAIN_DB', '8'))
 TTS_CACHE_VERSION = os.environ.get('TTS_CACHE_VERSION', 'xiaoke-v1')
 
+def _ssl_context():
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        try:
+            return ssl.create_default_context(cafile='/etc/ssl/cert.pem')
+        except Exception:
+            return ssl.create_default_context()
+
+
+SSL_CTX = _ssl_context()
+
 LLM_PRESETS = {
     'openai': ('https://api.openai.com/v1/chat/completions', 'gpt-4o-mini'),
-    'gemini': ('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', 'gemini-2.0-flash'),
+    'gemini': ('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', 'gemini-2.5-flash'),
     'deepseek': ('https://api.deepseek.com/chat/completions', 'deepseek-chat'),
     'openrouter': ('https://openrouter.ai/api/v1/chat/completions', 'deepseek/deepseek-chat'),
     'opencode': ('https://opencode.ai/inference/openai/v1/chat/completions', 'gemini-3.5-flash-lite'),
@@ -637,7 +651,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     method='POST',
                 )
                 try:
-                    with urllib.request.urlopen(req, timeout=120) as res:
+                    with urllib.request.urlopen(req, timeout=120, context=SSL_CTX) as res:
                         data = res.read()
                         status = res.status
                 except urllib.error.HTTPError as exc:
