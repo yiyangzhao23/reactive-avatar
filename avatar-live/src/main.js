@@ -275,7 +275,7 @@ let camOn = false, screenOn = false;
 
 const MODEL_PRESETS = {
   openai: { model: 'gpt-4o-mini', base_url: '' },
-  gemini: { model: 'gemini-2.5-flash', base_url: '' },
+  gemini: { model: 'gemini-3.8-flash', base_url: '' },
   deepseek: { model: 'deepseek-chat', base_url: '' },
   openrouter: { model: 'deepseek/deepseek-chat', base_url: '' },
   custom: { model: '', base_url: '' },

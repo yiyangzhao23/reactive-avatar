@@ -63,7 +63,7 @@ SSL_CTX = _ssl_context()
 
 LLM_PRESETS = {
     'openai': ('https://api.openai.com/v1/chat/completions', 'gpt-4o-mini'),
-    'gemini': ('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', 'gemini-2.5-flash'),
+    'gemini': ('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', 'gemini-3.8-flash'),
     'deepseek': ('https://api.deepseek.com/chat/completions', 'deepseek-chat'),
     'openrouter': ('https://openrouter.ai/api/v1/chat/completions', 'deepseek/deepseek-chat'),
     'opencode': ('https://opencode.ai/inference/openai/v1/chat/completions', 'gemini-3.5-flash-lite'),
