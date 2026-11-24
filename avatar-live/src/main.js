@@ -65,6 +65,18 @@ const I18N = {
     ledgerEmpty: '暂无记忆。',
     ledgerMemory: '最近记忆：',
     perceptionResumed: '感知已继续：新的观察会再次发送给模型。',
+    quickTitle: '30 秒开始',
+    quickStep: '开启摄像头或共享屏幕 → 说话或打字 → 看小可如何回应。',
+    quickData: '摄像头和屏幕在本地分析；需要理解画面时，观察摘要、截图和文本会发给你选择的模型服务商；服务器不保存、不写日志。',
+    quickMemory: '记忆存在本机 SQLite，默认 30 天，可清空；模型可选 OpenAI / Gemini / DeepSeek / OpenRouter / 自定义。',
+    quickDismiss: '知道了',
+    stateIdle: '待机', stateListening: '监听中', stateThinking: '思考中', stateSpeaking: '说话中', stateMuted: '已静音',
+    stillThinking: '正在处理…',
+    muteOn: '静音', muteOff: '取消静音',
+    stopMedia: '停止摄像头/屏幕',
+    mediaStopped: '摄像头和屏幕已停止。',
+    mediaCamOn: '摄像头：使用中', mediaCamOff: '摄像头：关',
+    mediaScreenOn: '屏幕：使用中', mediaScreenOff: '屏幕：关',
     modelSettings: '模型设置',
     modelTitle: '模型设置 · 使用你自己的 API Key',
     modelHint: 'Key 只保存在本页内存：刷新或关闭页面即清空。请求先发到本机服务器再转发；不写磁盘、不写入日志。',
@@ -163,6 +175,18 @@ const I18N = {
     ledgerEmpty: 'No memory yet.',
     ledgerMemory: 'Recent memory:',
     perceptionResumed: 'Perception resumed: new observations are sent to the model again.',
+    quickTitle: 'Start in 30 seconds',
+    quickStep: 'Turn on the camera or share your screen → speak or type → watch how Xiao Ke responds.',
+    quickData: 'Camera and screen are analysed locally. When the model needs to understand the scene, the observation, screenshot, and text are sent to your selected provider; the server does not save or log them.',
+    quickMemory: 'Memory is stored in local SQLite for 30 days by default and can be cleared. Choose OpenAI / Gemini / DeepSeek / OpenRouter / custom.',
+    quickDismiss: 'Got it',
+    stateIdle: 'Idle', stateListening: 'Listening', stateThinking: 'Thinking', stateSpeaking: 'Speaking', stateMuted: 'Muted',
+    stillThinking: 'Still working…',
+    muteOn: 'Mute', muteOff: 'Unmute',
+    stopMedia: 'Stop camera/screen',
+    mediaStopped: 'Camera and screen stopped.',
+    mediaCamOn: 'Camera: in use', mediaCamOff: 'Camera: off',
+    mediaScreenOn: 'Screen: in use', mediaScreenOff: 'Screen: off',
     modelSettings: 'Model settings',
     modelTitle: 'Model settings · use your own API key',
     modelHint: 'The key stays in this page memory only: refresh or close the page to clear it. Requests go to the local server, which forwards them; no disk writes, no logs.',
@@ -271,6 +295,13 @@ const modelBase = $('modelBase');
 const modelBaseRow = $('modelBaseRow');
 const modelError = $('modelError');
 const modelTestBtn = $('modelTest');
+const quickStart = $('quickStart');
+const quickStartClose = $('quickStartClose');
+const voiceState = $('voiceState');
+const mediaState = $('mediaState');
+const stopMediaBtn = $('stopMediaBtn');
+const muteBtn = $('muteBtn');
+let muted = false;
 let camOn = false, screenOn = false;
 
 const MODEL_PRESETS = {
@@ -285,6 +316,37 @@ const getProvider = () => modelSettings.provider;
 const getKey = () => modelSettings.api_key;
 const getLlm = () => ({ ...modelSettings });
 const getGeminiKey = () => (modelSettings.provider === 'gemini' ? modelSettings.api_key : '');
+
+function setVoiceState(name) {
+  const key = { idle: 'stateIdle', listening: 'stateListening', thinking: 'stateThinking', speaking: 'stateSpeaking', muted: 'stateMuted' }[name] || 'stateIdle';
+  voiceState.dataset.state = name;
+  voiceState.textContent = t(key);
+}
+
+function updateMediaState() {
+  const bits = [t(camOn ? 'mediaCamOn' : 'mediaCamOff'), t(screenOn ? 'mediaScreenOn' : 'mediaScreenOff')];
+  mediaState.textContent = bits.join(' · ');
+  stopMediaBtn.disabled = !camOn && !screenOn;
+  stopMediaBtn.classList.toggle('hidden', !camOn && !screenOn);
+}
+
+function stopAllMedia() {
+  if (camOn) {
+    stopCamera();
+    camOn = false;
+    camBtn.classList.remove('active'); camBtn.textContent = t('camOff');
+    $('camDot').classList.remove('on');
+  }
+  if (screenOn) {
+    stopScreenShare();
+    screenOn = false;
+    shareBtn.classList.remove('active'); shareBtn.textContent = t('shareOff');
+    $('shareDot').classList.remove('on');
+    live?.setScreenVideo?.(null);
+  }
+  updateMediaState();
+  log(t('mediaStopped'));
+}
 
 // ---------- 剧情记忆 ----------
 const memoryBtn = $('memoryBtn');
@@ -414,6 +476,10 @@ function applyLang() {
   renderVoiceOptions();
   liveBtn.textContent = t(liveActive ? 'liveStop' : 'liveStart');
   updateModelStatus();
+  setVoiceState(voiceState.dataset.state || 'idle');
+  updateMediaState();
+  muteBtn.textContent = t(muted ? 'muteOff' : 'muteOn');
+  if (localStorage.getItem('quickStartDismissed') === '1') quickStart.classList.add('hidden');
 }
 
 langSel.value = lang;
@@ -675,12 +741,44 @@ pauseBtn.onclick = () => {
   log(perceptionPaused ? t('ledgerPaused') : t('perceptionResumed'));
 };
 
+quickStartClose.onclick = () => {
+  quickStart.classList.add('hidden');
+  localStorage.setItem('quickStartDismissed', '1');
+};
+stopMediaBtn.onclick = stopAllMedia;
+muteBtn.onclick = () => {
+  muted = !muted;
+  if (muted) {
+    stopSpeaking();
+    if (handsFreeOn) {
+      stopHandsFree();
+      handsFreeOn = false;
+      handsFreeBtn.classList.remove('active');
+      handsFreeBtn.textContent = t('handsFreeStart');
+    }
+    if (liveActive) stopLiveMode();
+    if (voiceRec) {
+      voiceRec = false;
+      voiceRec = false;
+      micBtn.classList.remove('recording');
+      micBtn.textContent = t('micStart');
+      stopRecording();
+    }
+    setVoiceState('muted');
+  } else {
+    setVoiceState('idle');
+  }
+  muteBtn.textContent = t(muted ? 'muteOff' : 'muteOn');
+  log(t(muted ? 'stateMuted' : 'stateIdle'));
+};
+
 camBtn.onclick = async () => {
   if (camOn) {
     stopCamera();
     camOn = false;
     camBtn.classList.remove('active'); camBtn.textContent = t('camOff');
     $('camDot').classList.remove('on');
+    updateMediaState();
     log(t('camStopped'));
     return;
   }
@@ -690,11 +788,13 @@ camBtn.onclick = async () => {
     camBtn.classList.add('active'); camBtn.textContent = t('camOn');
     $('camDot').classList.add('on');
     startFaceTracking();
+    updateMediaState();
     stream.getVideoTracks()[0].addEventListener('ended', () => {
       camOn = false;
       camBtn.classList.remove('active'); camBtn.textContent = t('camOff');
       $('camDot').classList.remove('on');
       stopCamera();
+      updateMediaState();
     });
     react('happy', t('camOpen'));
   } catch (e) { log(t('camFail')(e.message)); }
@@ -707,6 +807,7 @@ shareBtn.onclick = async () => {
     shareBtn.classList.remove('active'); shareBtn.textContent = t('shareOff');
     $('shareDot').classList.remove('on');
     live?.setScreenVideo?.(null);
+    updateMediaState();
     log(t('shareStopped'));
     return;
   }
@@ -716,12 +817,14 @@ shareBtn.onclick = async () => {
     shareBtn.classList.add('active'); shareBtn.textContent = t('shareOn');
     $('shareDot').classList.add('on');
     live?.setScreenVideo?.(screenVideo);
+    updateMediaState();
     stream.getVideoTracks()[0].addEventListener('ended', () => {
       screenOn = false;
       shareBtn.classList.remove('active'); shareBtn.textContent = t('shareOff');
       $('shareDot').classList.remove('on');
       live?.setScreenVideo?.(null);
       stopScreenShare();
+      updateMediaState();
     });
     react('surprised', t('shareOpen'));
   } catch (e) { log(t('shareFail')(e.message)); }
@@ -735,6 +838,10 @@ async function analyzeScreen() {
   if (!llm.api_key) { log(t('modelOffline')); return; }
   if (llm.provider === 'deepseek') { log(t('needGeminiVision')); return; }
   const thinking = log(t('analyzing'), null, false, 'thinking');
+  setVoiceState('thinking');
+  const slow = setTimeout(() => {
+    if (thinking.isConnected) thinking.textContent = t('stillThinking');
+  }, 1000);
   analyzeBtn.disabled = true;
   try {
     const img = captureScreen();
@@ -777,6 +884,7 @@ memory: one sentence of new long-term fact; empty string if nothing new.`;
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
     text = json.choices?.[0]?.message?.content?.trim() ?? '';
+    clearTimeout(slow);
     thinking.remove();
     if (!text) throw new Error('empty');
     if (memoryOn) {
@@ -795,8 +903,10 @@ memory: one sentence of new long-term fact; empty string if nothing new.`;
     }
     react('relaxed', text);
   } catch (e) {
+    clearTimeout(slow);
     thinking.remove();
     log(t('analyzeFail') + e.message);
+    setVoiceState(muted ? 'muted' : 'idle');
   } finally {
     analyzeBtn.disabled = false;
   }
@@ -834,6 +944,8 @@ const MANDARIN_NAME = /tingting|ting-ting|meijia|mei-jia|普通话|国语|國語
 function setTalking(on) {
   speaking = on;
   avatar?.setTalking(on);
+  if (muted) setVoiceState('muted');
+  else setVoiceState(on ? 'speaking' : 'idle');
 }
 
 function refreshVoices() {
@@ -926,6 +1038,7 @@ function stopSpeaking() {
   if (visemeTimer) { clearInterval(visemeTimer); visemeTimer = null; }
   setTalking(false);
   avatar?.setMouth?.(null);
+  setVoiceState(muted ? 'muted' : 'idle');
 }
 
 async function speakGemini(text, voiceName, seq) {
@@ -1021,6 +1134,7 @@ async function speakServerPart(text, seq) {
 }
 
 async function speak(text) {
+  if (muted) { setVoiceState('muted'); return; }
   stopSpeaking();
   const seq = speakSeq;
   const mode = localStorage.getItem('voiceMode') || 'gemini:Aoede';
@@ -1132,6 +1246,7 @@ const LIVE_SYSTEM = `你是小可，一个住在网页里的 3D 虚拟伙伴。�
 你知道自己是一个合成角色，不要假装是真人；不确定时说不确定，不要编造。`;
 
 async function startLiveMode() {
+  if (muted) { log(t('stateMuted')); return; }
   const key = getGeminiKey();
   if (!key) { log(t('liveNeedGemini')); return; }
   if (liveActive) return;
@@ -1142,9 +1257,9 @@ async function startLiveMode() {
     getLang: () => lang,
     system: LIVE_SYSTEM,
     onStatus: (state) => {
-      if (state === 'connecting') liveStatus.textContent = t('liveConnecting');
-      if (state === 'connected') liveStatus.textContent = t('liveConnected');
-      if (state.startsWith('closed')) liveStatus.textContent = t('liveClosed');
+      if (state === 'connecting') { liveStatus.textContent = t('liveConnecting'); setVoiceState('thinking'); }
+      if (state === 'connected') { liveStatus.textContent = t('liveConnected'); setVoiceState('listening'); }
+      if (state.startsWith('closed')) { liveStatus.textContent = t('liveClosed'); setVoiceState(muted ? 'muted' : 'idle'); }
     },
     onUserText: (txt) => log(txt, null, true),
     onUserInterim: (txt) => { chatInput.value = txt; },
@@ -1155,7 +1270,10 @@ async function startLiveMode() {
     onLevel: (level) => { avatar?.setMouth(level > 0.03 ? level : 0); },
     onSpeaking: (on) => {
       setTalking(on);
-      if (!on) avatar?.setMouth(null);
+      if (!on) {
+        avatar?.setMouth(null);
+        if (liveActive) setVoiceState(muted ? 'muted' : 'listening');
+      }
     },
     onError: (e) => log(t('liveError') + e),
   });
@@ -1194,6 +1312,7 @@ function stopLiveMode() {
   micBtn.disabled = false;
   setTalking(false);
   avatar?.setMouth(null);
+  setVoiceState(muted ? 'muted' : 'idle');
   log(t('liveClosed'));
 }
 
@@ -1290,39 +1409,50 @@ async function sendUserText(text) {
   }
 
   if (liveActive) {
+    setVoiceState('thinking');
     live.sendText(line);
     return;
   }
 
   const thinking = log(t('thinking'), null, false, 'thinking');
+  setVoiceState('thinking');
+  const slow = setTimeout(() => {
+    if (thinking.isConnected) thinking.textContent = t('stillThinking');
+  }, 1000);
   chatSend.disabled = true;
   try {
     const context = memoryOn ? await memoryContext(line) : '';
     const reply = await brain.chatUser(line, context);
+    clearTimeout(slow);
     thinking.remove();
     chatSend.disabled = false;
     chatInput.focus();
     react(reply.emotion, reply.line, reply.action);
   } catch (e) {
+    clearTimeout(slow);
     thinking.remove();
     chatSend.disabled = false;
     log(t('chatError') + e.message);
+    setVoiceState(muted ? 'muted' : 'idle');
   }
 }
 
 micBtn.onclick = async () => {
+  if (muted) { log(t('stateMuted')); return; }
   if (!voiceRec) {
     try {
       await startRecording();
       voiceRec = true;
       micBtn.classList.add('recording');
       micBtn.textContent = t('micStop');
+      setVoiceState('listening');
     } catch (e) { log(t('micFail') + e.message); }
     return;
   }
   voiceRec = false;
   micBtn.classList.remove('recording');
   micBtn.textContent = t('micStart');
+  setVoiceState('thinking');
   const blob = stopRecording();
   if (!blob) return;
   const gk = getGeminiKey();
@@ -1336,23 +1466,26 @@ micBtn.onclick = async () => {
   } catch (e) {
     thinking.remove();
     log(t('sttFail') + e.message);
+    setVoiceState(muted ? 'muted' : 'idle');
   }
 };
 
 handsFreeBtn.onclick = async () => {
+  if (muted) { log(t('stateMuted')); return; }
   if (handsFreeOn) {
     stopHandsFree();
     handsFreeOn = false;
     handsFreeBtn.classList.remove('active');
     handsFreeBtn.textContent = t('handsFreeStart');
+    setVoiceState(muted ? 'muted' : 'idle');
     log(t('handsFreeOff'));
     return;
   }
   const ok = await startHandsFree({
     lang,
-    onStart: () => log(t('handsFreeOn')),
+    onStart: () => { setVoiceState('listening'); log(t('handsFreeOn')); },
     onInterim: (txt) => { chatInput.value = txt; },
-    onSpeechStart: () => { if (speaking) stopSpeaking(); },
+    onSpeechStart: () => { setVoiceState('listening'); if (speaking) stopSpeaking(); },
     onFinal: (txt) => {
       chatInput.value = '';
       sendUserText(txt);

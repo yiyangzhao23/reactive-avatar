@@ -89,3 +89,32 @@ test('model settings save in memory and clear on reload', async ({ page }) => {
   await expect(page.locator('#modelDialog')).toHaveAttribute('open', '');
   await expect(page.locator('#modelStatus')).toContainText('离线');
 });
+
+test('first-time quick start explains permissions and can be dismissed', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#quickStart')).toBeVisible();
+  await expect(page.locator('#quickStart')).toContainText('30 秒开始');
+  await expect(page.locator('#quickStart')).toContainText('摄像头');
+  await page.click('#quickStartClose');
+  await expect(page.locator('#quickStart')).toBeHidden();
+  await page.reload();
+  await expect(page.locator('#quickStart')).toBeHidden();
+});
+
+test('camera in-use state and stop-media control', async ({ page }) => {
+  await page.goto('/');
+  await page.click('#quickStartClose');
+  await page.click('#camBtn');
+  await expect(page.locator('#mediaState')).toContainText('摄像头：使用中');
+  await page.click('#stopMediaBtn');
+  await expect(page.locator('#mediaState')).toContainText('摄像头：关');
+});
+
+test('mute shows a muted state and restores idle', async ({ page }) => {
+  await page.goto('/');
+  await page.click('#quickStartClose');
+  await page.click('#muteBtn');
+  await expect(page.locator('#voiceState')).toHaveText('已静音');
+  await page.click('#muteBtn');
+  await expect(page.locator('#voiceState')).toHaveText('待机');
+});

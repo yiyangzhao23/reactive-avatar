@@ -27,6 +27,7 @@ the page and proxies model/TTS requests.
 - Perception ledger: shows what the model actually receives, with a pause switch
 - Browser automation: open URLs, search, read/summarize pages, click by text,
   scroll, screenshot, and close the browser (with confirmation for clicks)
+- First-run quick start, voice-state badge (idle/listening/thinking/speaking/muted), mute, and a stop camera/screen control
 - PWA: installable from the browser; service worker caches the shell
 
 ## Quick start

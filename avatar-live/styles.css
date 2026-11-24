@@ -112,3 +112,20 @@ select {
   display: flex; flex-direction: column; gap: 7px;
 }
 .about strong { color: #cdd3ff; font-weight: 600; }
+
+.quick-start {
+  border: 1px solid #4650ff; border-radius: 10px; padding: 10px;
+  background: #141a35; display: flex; flex-direction: column; gap: 6px;
+  font-size: 11px; line-height: 1.5;
+}
+.quick-start.hidden { display: none; }
+.quick-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.quick-head strong { color: #cdd3ff; font-size: 12px; }
+.quick-start p { margin: 0; color: #aab1cf; }
+.quick-start .tiny { color: #8b93b5; font-size: 10.5px; }
+.media-row { align-items: center; justify-content: space-between; }
+.media-row .hint { flex: 1; }
+#voiceState[data-state="listening"] { background: #1f6b4d; color: #7ef0be; }
+#voiceState[data-state="thinking"] { background: #5a4a1d; color: #ffd166; }
+#voiceState[data-state="speaking"] { background: #3340a8; color: #cdd3ff; }
+#voiceState[data-state="muted"] { background: #4a2a2f; color: #ff9aa2; }

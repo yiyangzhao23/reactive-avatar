@@ -1,0 +1,18 @@
+% Auto-generated from evidence.csv by make_evidence_table.py — edit the CSV, not this file.
+\begin{tabular}{p{0.27\textwidth}p{0.20\textwidth}p{0.13\textwidth}p{0.08\textwidth}p{0.22\textwidth}}
+  \toprule
+  \textbf{Claim / Element} & \textbf{Source / File} & \textbf{Locator} & \textbf{Level} & \textbf{Boundary / Limit} \\
+  \midrule
+  ELIZA makes it easy to create and maintain the illusion of understanding & Weizenbaum, ELIZA (1966) & p. 42 & 据 & Close reading of one article; this project has no user study \\
+  The test of understanding is drawing valid conclusions, not continuing a conversation & Weizenbaum, ELIZA (1966) & p. 43 & 据 & A program-level claim, not a benchmark of current LLMs \\
+  Capture tracks activity through a grammar and reorganizes that activity & Agre, Surveillance and Capture (1994) & pp. 743-750 (New Media Reader reprint) & 据 & Conceptual model; no empirical test of this UI \\
+  LLMs manipulate linguistic form rather than perform natural language understanding & Bender et al., Stochastic Parrots (2021) & pp. 610-611, 619 & 据 & Argued for large LMs generally; this prototype is not evaluated \\
+  A 3D body, voice, and gaze are designed to produce a sense of presence & avatar-live/src/avatar.js; src/main.js & VRMAvatar.update(); speak() & 设 & Design intention; no user study of presence \\
+  The perception ledger shows the model's input and can be paused & avatar-live/index.html; src/main.js & \#ledger; \#pausePerception; perceptionPaused & 设 & Transparency claim untested; pause only stops new observations \\
+  The avatar keeps a short local speech and memory context & avatar-live/src/brain.js; avatar-live/server.py & chatUser(); /memory; memory.db & 据 & Prototype behaviour, not a model of long-term memory \\
+  The deployed build splits a 71MB VRM into four hash-named parts & avatar-live/build.js; avatar-live/model-parts/manifest.json & model-parts; 4 parts; 74.8MB total & 据 & Build artifact; model licensing is separate \\
+  Gemini Live accepts 16kHz PCM audio and JPEG frames up to 1fps & Google Gemini Live API documentation & Technical specifications: input audio/images & 据 & Preview service; region and model availability vary \\
+  Autonomous gestures are inferred from the reply when the model returns none & avatar-live/src/brain.js; avatar-live/src/main.js & inferAction(); react() & 设 & Heuristic; it can gesture at the wrong moment \\
+  The avatar is likely to invite anthropomorphic trust by combining voice, gaze, and memory & Weizenbaum (1966); Bender et al. (2021); prototype UI & pp. 42-43; 610-611; live UI & 推断 & Inference from literature and design, not measured with users \\
+  \bottomrule
+\end{tabular}

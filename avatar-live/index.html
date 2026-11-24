@@ -35,6 +35,16 @@
       <button id="modelBtn" data-i18n="modelSettings"></button>
     </div>
     <p id="modelStatus" class="hint"></p>
+
+    <section id="quickStart" class="quick-start">
+      <div class="quick-head">
+        <strong data-i18n="quickTitle"></strong>
+        <button id="quickStartClose" type="button" class="mini" data-i18n="quickDismiss"></button>
+      </div>
+      <p data-i18n="quickStep"></p>
+      <p class="tiny" data-i18n="quickData"></p>
+      <p class="tiny" data-i18n="quickMemory"></p>
+    </section>
     <div class="row">
       <button id="camBtn" data-i18n="camOff"></button>
       <button id="shareBtn" data-i18n="shareOff"></button>
@@ -51,6 +61,7 @@
     </div>
     <div class="row">
       <button id="liveBtn" data-i18n="liveStart"></button>
+      <button id="muteBtn" class="mini" data-i18n="muteOn"></button>
     </div>
     <p id="liveStatus" class="hint"></p>
 
@@ -86,6 +97,11 @@
       <span id="shareDot" class="dot"></span><span data-i18n="stScreen"></span>
       <span id="faceDot" class="dot"></span><span data-i18n="stFace"></span>
       <span id="emoBadge" class="badge">neutral</span>
+      <span id="voiceState" class="badge">待机</span>
+    </div>
+    <div class="row media-row">
+      <span id="mediaState" class="hint"></span>
+      <button id="stopMediaBtn" class="mini" type="button" data-i18n="stopMedia"></button>
     </div>
     <p id="voiceInfo" class="voice"></p>
 
@@ -141,6 +157,6 @@
     </form>
   </dialog>
 
-  <script type="module" src="./src/main.js?v=48"></script>
+  <script type="module" src="./src/main.js?v=49"></script>
 </body>
 </html>
