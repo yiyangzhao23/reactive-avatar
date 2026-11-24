@@ -1,5 +1,28 @@
 # Reactive Avatar 上线计划（v1 · 公开 Beta，桌面优先）
 
+## 0. Scope Lock · 2026-11-24
+
+**当前范围（已锁定）**
+
+- 3D VRM 角色：加载、待机、眨眼/视线、手势、表情。
+- 感知：摄像头人脸/微笑/眨眼；屏幕共享亮度/变化；`暂停感知`。
+- 对话：文字与语音；BYOK 模型；Gemini Live 实时语音（可选）；离线 fallback。
+- 模型设置：OpenAI / Gemini / DeepSeek / OpenRouter / 自定义；Key 仅页面内存；`/api/chat` 本机代理与 Pages Function。
+- 记忆：本地 SQLite（source / expires_at / 关键词检索）与页面内 `记住` 工具。
+- 浏览器自动化：打开/搜索/读取/点击/截图；点击需确认；仅本机/开发用途。
+- PWA、感知账本、合成角色标识、About 说明。
+- 部署：Cloudflare Pages + Pages Function；`model.vrm` 是构建输入，`dist/`、`model-parts/`、日志和音频不进 Git。
+
+**明确不做（v1）**
+
+- 账号、支付、订阅、跨设备记忆同步。
+- 移动端、iOS 屏幕共享、原生 App。
+- 托管 GPU TTS / 用户音色授权审核。
+- Minecraft / Factorio / Discord / Telegram 等游戏或聊天集成。
+
+**变更规则**：新增功能先写入本文件并说明验收测试；未进入以上范围的功能不阻塞 v1 发布。任何 API Key、截图、音频、聊天原文不得写入 Git 或日志。
+
+
 > 本文件是规划文档，不含实现细节。所有"待确认"项在开工前需拍板。
 
 ## 1. 已确认的产品决策
@@ -10,13 +33,13 @@
 | 平台 | 桌面浏览器优先（Chrome / Safari / Edge，macOS / Windows） |
 | 主要用户地区 | 香港 + 海外（Gemini API 在香港不可直接使用） |
 | 账号体系 | 无；正式版为 **BYOK**（用户自帶 Key） |
-| Key 处理 | Key 只保存在浏览器 localStorage；服务器不保存、不记录 |
+| Key 处理 | Key 只保存在页面内存；经本机 `/api/chat` 或 Pages Function 透传；不写磁盘、不写日志 |
 | VRM 模型 | 「破茧」已确认可商用 |
-| 语音方案（v1） | **不托管克隆音色**；统一使用浏览器/系统音色（站主音色仅本机开发/演示） |
-| 用户自传音色 | v1 不开放；若未来开放，必须要求用户声明并上传授权证明 |
-| 模型通道 | 海外：浏览器**直连 Gemini**；香港/不可直连：**OpenCode 閘道**（经后端代理，音频输入用支持 audio 的 gateway 模型） |
-| 剧情记忆（v1） | **浏览器本地存储**（localStorage），跨设备不同步 |
-| 反滥用 | **Cloudflare Turnstile** 保护后端代理；验证一次换短期 HttpOnly session cookie |
+| 语音方案（v1） | 公网使用浏览器/系统音色；GPT-SoVITS 固定音色仅本机开发/演示 |
+| 用户自传音色 | 仅本机开发；不托管到公网；须自有权或授权，文件不进 Git |
+| 模型通道 | 统一走同源 `/api/chat`：OpenAI / Gemini / DeepSeek / OpenRouter / 自定义；Gemini 自动跳过不支持的 `response_format` |
+| 剧情记忆（v1） | 本机 SQLite（source / expires_at / 关键词检索）；跨设备不同步 |
+| 反滥用 | v1 未实现 Turnstile；公网 `/api/chat` 仍是无鉴权 BYOK 代理，发布前需补 |
 
 ## 2. 范围（Scope）
 

@@ -105,3 +105,10 @@ select {
 }
 .model-dialog .row { margin-top: 10px; }
 #modelBaseRow.hidden { display: none; }
+
+.about {
+  border-top: 1px solid #2a2f4a; margin-top: 14px; padding-top: 12px;
+  color: #8b93b5; font-size: 11px; line-height: 1.55;
+  display: flex; flex-direction: column; gap: 7px;
+}
+.about strong { color: #cdd3ff; font-weight: 600; }

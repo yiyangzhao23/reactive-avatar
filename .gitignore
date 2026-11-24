@@ -41,3 +41,19 @@ coverage/
 # Playwright
 playwright-report/
 test-results/
+
+# Secrets / credentials (never commit)
+.env
+.env.*
+*.key
+*.pem
+api_key*
+secrets*
+
+# Private voice samples / runtime data (keep local only)
+avatar-live/voice/*.wav
+avatar-live/voice/*.m4a
+avatar-live/voice/*.mp3
+avatar-live/voice/*.txt
+avatar-live/voice/voices/
+avatar-live/artifacts/
