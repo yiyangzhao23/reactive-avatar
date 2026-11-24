@@ -22,6 +22,8 @@ export default defineConfig({
         '--use-fake-device-for-media-stream',
         '--use-angle=swiftshader',
         '--enable-unsafe-swiftshader',
+        // Bypass a local system proxy that resets *.pages.dev; set PW_KEEP_PROXY=1 to opt out.
+        ...(process.env.PW_KEEP_PROXY === '1' ? [] : ['--proxy-server=direct://', '--proxy-bypass-list=*']),
       ],
     },
   },

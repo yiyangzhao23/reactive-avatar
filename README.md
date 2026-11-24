@@ -48,15 +48,13 @@ Google Chrome):
 python3 -m pip install -r requirements.txt
 ```
 
-### Add an avatar model
+### Avatar model
 
-`model.vrm` is not included (large file, separate license). Put a VRM model here:
-
-```text
-reactive-avatar/model.vrm
-```
-
-Without it the app falls back to a simple placeholder character.
+`avatar-live/model.vrm` is the build input for the deployed site (about 71MB);
+`build.js` splits it into <25MiB parts for Cloudflare Pages. Replace it only
+with a VRM model you have a license to distribute. Other large runtime files
+(databases, logs, screenshots, private voice samples) live in
+`avatar-live/artifacts/` or are git-ignored; they are not committed.
 
 ### Optional: custom voice by uploading a file
 
@@ -175,8 +173,8 @@ requests always go to the local server.
 
 ## Not included
 
-- `model.vrm` (add your own, with a compatible license)
-- voice recordings, reference audio, test audio
+- additional large model variants (use external storage or `artifacts/`)
+- voice recordings, reference audio, test audio (keep local)
 - `.gsv/` (local GPT-SoVITS install and models)
 - `memory.db`, `browser_log.jsonl`, `artifacts/browser/` and API keys
   (local runtime data)
